@@ -103,7 +103,7 @@ nu scripts/generate.nu countries
 
 _This section is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._
 
-This collection contains 1895 clients.
+This collection contains 1918 clients.
 
 ### advertising
 
@@ -1924,23 +1924,46 @@ This collection contains 1895 clients.
 
 ### sports
 
-| Client                                                                 | Type    | Source                                                                                                  |
-| ---------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| [balldontlie](clients/sports/balldontlie.nu)                           | openapi | <https://api.apis.guru/v2/specs/balldontlie.io/1.0.0/openapi.json>                                      |
-| [collegefootballdata](clients/sports/collegefootballdata.nu)           | openapi | <https://api.apis.guru/v2/specs/collegefootballdata.com/4.4.12/openapi.json>                            |
-| [fitbit](clients/sports/fitbit.nu)                                     | openapi | <https://raw.githubusercontent.com/allenporter/fitbit-web-api/main/openapi/fitbit-web-api-openapi.json> |
-| [football-prediction](clients/sports/football-prediction.nu)           | openapi | <https://api.apis.guru/v2/specs/rapidapi.com/football-prediction/2/openapi.json>                        |
-| [sportsdata-cbb-scores](clients/sports/sportsdata-cbb-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/cbb-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-cfb-scores](clients/sports/sportsdata-cfb-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/cfb-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-golf](clients/sports/sportsdata-golf.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/golf-v2/1.0/openapi.json>                                 |
-| [sportsdata-mlb-scores](clients/sports/sportsdata-mlb-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-nascar](clients/sports/sportsdata-nascar.nu)               | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nascar-v2/1.0/openapi.json>                               |
-| [sportsdata-nba-scores](clients/sports/sportsdata-nba-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-nfl-scores](clients/sports/sportsdata-nfl-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-nhl-scores](clients/sports/sportsdata-nhl-scores.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nhl-v3-scores/1.0/openapi.json>                           |
-| [sportsdata-soccer-scores](clients/sports/sportsdata-soccer-scores.nu) | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/soccer-v3-scores/1.0/openapi.json>                        |
-| [strava](clients/sports/strava.nu)                                     | openapi | <https://developers.strava.com/swagger/swagger.json>                                                    |
-| [whapi-sportsdata](clients/sports/whapi-sportsdata.nu)                 | openapi | <https://api.apis.guru/v2/specs/whapi.com/sportsdata/2/swagger.json>                                    |
+| Client                                                                           | Type    | Source                                                                                                  |
+| -------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| [balldontlie](clients/sports/balldontlie.nu)                                     | openapi | <https://api.apis.guru/v2/specs/balldontlie.io/1.0.0/openapi.json>                                      |
+| [collegefootballdata](clients/sports/collegefootballdata.nu)                     | openapi | <https://api.apis.guru/v2/specs/collegefootballdata.com/4.4.12/openapi.json>                            |
+| [fitbit](clients/sports/fitbit.nu)                                               | openapi | <https://raw.githubusercontent.com/allenporter/fitbit-web-api/main/openapi/fitbit-web-api-openapi.json> |
+| [football-prediction](clients/sports/football-prediction.nu)                     | openapi | <https://api.apis.guru/v2/specs/rapidapi.com/football-prediction/2/openapi.json>                        |
+| [sportsdata-cbb-scores](clients/sports/sportsdata-cbb-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/cbb-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-cbb-stats](clients/sports/sportsdata-cbb-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/cbb-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-cfb-scores](clients/sports/sportsdata-cfb-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/cfb-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-csgo-scores](clients/sports/sportsdata-csgo-scores.nu)               | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/csgo-v3-scores/1.0/openapi.json>                          |
+| [sportsdata-csgo-stats](clients/sports/sportsdata-csgo-stats.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/csgo-v3-stats/1.0/openapi.json>                           |
+| [sportsdata-golf](clients/sports/sportsdata-golf.nu)                             | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/golf-v2/1.0/openapi.json>                                 |
+| [sportsdata-lol-projections](clients/sports/sportsdata-lol-projections.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/lol-v3-projections/1.0/openapi.json>                      |
+| [sportsdata-lol-scores](clients/sports/sportsdata-lol-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/lol-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-lol-stats](clients/sports/sportsdata-lol-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/lol-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-mlb-play-by-play](clients/sports/sportsdata-mlb-play-by-play.nu)     | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-play-by-play/1.0/openapi.json>                     |
+| [sportsdata-mlb-projections](clients/sports/sportsdata-mlb-projections.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-projections/1.0/openapi.json>                      |
+| [sportsdata-mlb-rotoballer](clients/sports/sportsdata-mlb-rotoballer.nu)         | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-rotoballer-articles/1.0/openapi.json>              |
+| [sportsdata-mlb-scores](clients/sports/sportsdata-mlb-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-mlb-stats](clients/sports/sportsdata-mlb-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-nascar](clients/sports/sportsdata-nascar.nu)                         | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nascar-v2/1.0/openapi.json>                               |
+| [sportsdata-nba-play-by-play](clients/sports/sportsdata-nba-play-by-play.nu)     | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-play-by-play/1.0/openapi.json>                     |
+| [sportsdata-nba-projections](clients/sports/sportsdata-nba-projections.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-projections/1.0/openapi.json>                      |
+| [sportsdata-nba-rotoballer](clients/sports/sportsdata-nba-rotoballer.nu)         | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-rotoballer-articles/1.0/openapi.json>              |
+| [sportsdata-nba-scores](clients/sports/sportsdata-nba-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-nba-stats](clients/sports/sportsdata-nba-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-nfl-play-by-play](clients/sports/sportsdata-nfl-play-by-play.nu)     | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-play-by-play/1.0/openapi.json>                     |
+| [sportsdata-nfl-projections](clients/sports/sportsdata-nfl-projections.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-projections/1.0/openapi.json>                      |
+| [sportsdata-nfl-rotoballer](clients/sports/sportsdata-nfl-rotoballer.nu)         | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-rotoballer-articles/1.0/openapi.json>              |
+| [sportsdata-nfl-scores](clients/sports/sportsdata-nfl-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-nfl-stats](clients/sports/sportsdata-nfl-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-nhl-play-by-play](clients/sports/sportsdata-nhl-play-by-play.nu)     | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nhl-v3-play-by-play/1.0/openapi.json>                     |
+| [sportsdata-nhl-projections](clients/sports/sportsdata-nhl-projections.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nhl-v3-projections/1.0/openapi.json>                      |
+| [sportsdata-nhl-scores](clients/sports/sportsdata-nhl-scores.nu)                 | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nhl-v3-scores/1.0/openapi.json>                           |
+| [sportsdata-nhl-stats](clients/sports/sportsdata-nhl-stats.nu)                   | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nhl-v3-stats/1.0/openapi.json>                            |
+| [sportsdata-soccer-projections](clients/sports/sportsdata-soccer-projections.nu) | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/soccer-v3-projections/1.0/openapi.json>                   |
+| [sportsdata-soccer-scores](clients/sports/sportsdata-soccer-scores.nu)           | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/soccer-v3-scores/1.0/openapi.json>                        |
+| [sportsdata-soccer-stats](clients/sports/sportsdata-soccer-stats.nu)             | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/soccer-v3-stats/1.0/openapi.json>                         |
+| [strava](clients/sports/strava.nu)                                               | openapi | <https://developers.strava.com/swagger/swagger.json>                                                    |
+| [whapi-sportsdata](clients/sports/whapi-sportsdata.nu)                           | openapi | <https://api.apis.guru/v2/specs/whapi.com/sportsdata/2/swagger.json>                                    |
 
 ### storage
 
