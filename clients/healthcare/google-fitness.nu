@@ -1,0 +1,637 @@
+# Auto-generated client for Fitness API vv1
+# Source: https://api.apis.guru/v2/specs/googleapis.com/fitness/v1/openapi.json
+# Auth: --token flag or $env.FITNESS_API_TOKEN
+
+const BASE_URL = "https://fitness.googleapis.com/fitness/v1/users"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FITNESS_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://fitness.googleapis.com/fitness/v1/users"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def xgafv-completer [] { ["1" "2"] }
+def alt-completer [] { ["json" "media" "proto"] }
+def type-completer [] { ["derived" "raw"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources fitnessusersdataSourceslist" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Lists all data sources that are visible to the developer, using the OAuth scopes provided. The list is not exhaustive; the user may have private data sources that are only visible to other developers, or calls using other scopes.
+#
+# GET /{userId}/dataSources
+# operationId: fitness.users.dataSources.list
+export def "data-sources fitnessusersdataSourceslist" [
+  userId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dataTypeName: list # The names of data types to include in the list. If not specified, all data sources will be returned.
+]: nothing -> record<dataSource: table<application: record, dataQualityStandard: list, dataStreamId: string, dataStreamName: string, dataType: record, device: record, name: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dataTypeName" $dataTypeName "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new data source that is unique across all data sources belonging to this user. A data source is a unique source of sensor data. Data sources can expose raw data coming from hardware sensors on local or companion devices. They can also expose derived data, created by transforming or merging other data sources. Multiple data sources can exist for the same data type. Every data point in every dataset inserted into or read from the Fitness API has an associated data source. Each data source produces a unique stream of dataset updates, with a unique data source identifier. Not all changes to data source affect the data stream ID, so that data collected by updated versions of the same application/device can still be considered to belong to the same data source. Data sources are identified using a string generated by the server, based on the contents of the source being created. The dataStreamId field should not be set when invoking this method. It will be automatically generated by the server with the correct format. If a dataStreamId is set, it must match the format that the server would generate. This format is a combination of some fields from the data source, and has a specific order. If it doesn't match, the request will fail with an error. Specifying a DataType which is not a known type (beginning with "com.google.") will create a DataSource with a *custom data type*. Custom data types are only readable by the application that created them. Custom data types are *deprecated*; use standard data types instead. In addition to the data source fields included in the data source ID, the developer project number that is authenticated when creating the data source is included. This developer project number is obfuscated when read by any other developer reading public data types.
+#
+# POST /{userId}/dataSources
+# operationId: fitness.users.dataSources.create
+# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+# --dataType shape: {field?: list, name?: string}
+# --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+export def "data-sources fitnessusersdataSourcescreate" [
+  userId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --application: record # shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+  --dataQualityStandard: list # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
+  --dataStreamId: string # A unique identifier for the data stream produced by this data source. The identifier includes: - The physical device's manufacturer, model, and serial number (UID). - The application's package name or name. Package name is used when the data source was created by an Android application. The developer project number is used when the data source was created by a REST client. - The data source's type. - The data source's stream name. Note that not all attributes of the data source are used as part of the stream identifier. In particular, the version of the hardware/the application isn't used. This allows us to preserve the same stream through version updates. This also means that two DataSource objects may represent the same data stream even if they're not equal. The exact format of the data stream ID created by an Android application is: type:dataType.name:application.packageName:device.manufacturer:device.model:device.uid:dataStreamName The exact format of the data stream ID created by a REST client is: type:dataType.name:developer project number:device.manufacturer:device.model:device.uid:dataStreamName When any of the optional fields that make up the data stream ID are absent, they will be omitted from the data stream ID. The minimum viable data stream ID would be: type:dataType.name:developer project number Finally, the developer project number and device UID are obfuscated when read by any REST or Android client that did not create the data source. Only the data source creator will see the developer project number in clear and normal form. This means a client will see a different set of data_stream_ids than another client with different credentials.
+  --dataStreamName: string # The stream name uniquely identifies this particular data source among other data sources of the same type from the same underlying producer. Setting the stream name is optional, but should be done whenever an application exposes two streams for the same data type, or when a device has two equivalent sensors.
+  --dataType: record # shape: {field?: list, name?: string}
+  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version.  — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+  --name: string # An end-user visible name for this data source.
+  --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
+]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources" $qp)
+  let body = {application: $application, dataQualityStandard: $dataQualityStandard, dataStreamId: $dataStreamId, dataStreamName: $dataStreamName, dataType: $dataType, device: $device, name: $name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the specified data source. The request will fail if the data source contains any data points.
+#
+# DELETE /{userId}/dataSources/{dataSourceId}
+# operationId: fitness.users.dataSources.delete
+export def "data-sources fitnessusersdataSourcesdelete" [
+  userId: string
+  dataSourceId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the specified data source.
+#
+# GET /{userId}/dataSources/{dataSourceId}
+# operationId: fitness.users.dataSources.get
+export def "data-sources fitnessusersdataSourcesget" [
+  userId: string
+  dataSourceId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the specified data source. The dataStreamId, dataType, type, dataStreamName, and device properties with the exception of version, cannot be modified. Data sources are identified by their dataStreamId.
+#
+# PUT /{userId}/dataSources/{dataSourceId}
+# operationId: fitness.users.dataSources.update
+# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+# --dataType shape: {field?: list, name?: string}
+# --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+export def "data-sources fitnessusersdataSourcesupdate" [
+  userId: string
+  dataSourceId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --application: record # shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+  --dataQualityStandard: list # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
+  --dataStreamId: string # A unique identifier for the data stream produced by this data source. The identifier includes: - The physical device's manufacturer, model, and serial number (UID). - The application's package name or name. Package name is used when the data source was created by an Android application. The developer project number is used when the data source was created by a REST client. - The data source's type. - The data source's stream name. Note that not all attributes of the data source are used as part of the stream identifier. In particular, the version of the hardware/the application isn't used. This allows us to preserve the same stream through version updates. This also means that two DataSource objects may represent the same data stream even if they're not equal. The exact format of the data stream ID created by an Android application is: type:dataType.name:application.packageName:device.manufacturer:device.model:device.uid:dataStreamName The exact format of the data stream ID created by a REST client is: type:dataType.name:developer project number:device.manufacturer:device.model:device.uid:dataStreamName When any of the optional fields that make up the data stream ID are absent, they will be omitted from the data stream ID. The minimum viable data stream ID would be: type:dataType.name:developer project number Finally, the developer project number and device UID are obfuscated when read by any REST or Android client that did not create the data source. Only the data source creator will see the developer project number in clear and normal form. This means a client will see a different set of data_stream_ids than another client with different credentials.
+  --dataStreamName: string # The stream name uniquely identifies this particular data source among other data sources of the same type from the same underlying producer. Setting the stream name is optional, but should be done whenever an application exposes two streams for the same data type, or when a device has two equivalent sensors.
+  --dataType: record # shape: {field?: list, name?: string}
+  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version.  — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+  --name: string # An end-user visible name for this data source.
+  --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
+]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)" $qp)
+  let body = {application: $application, dataQualityStandard: $dataQualityStandard, dataStreamId: $dataStreamId, dataStreamName: $dataStreamName, dataType: $dataType, device: $device, name: $name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Queries for user's data point changes for a particular data source.
+#
+# GET /{userId}/dataSources/{dataSourceId}/dataPointChanges
+# operationId: fitness.users.dataSources.dataPointChanges.list
+export def "data-sources-data-point-changes fitnessusersdataSourcesdataPointChangeslist" [
+  userId: string
+  dataSourceId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --limit: int # If specified, no more than this many data point changes will be included in the response.
+  --pageToken: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of nextPageToken from the previous response.
+]: nothing -> record<dataSourceId: string, deletedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, insertedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)/dataPointChanges" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Performs an inclusive delete of all data points whose start and end times have any overlap with the time range specified by the dataset ID. For most data types, the entire data point will be deleted. For data types where the time span represents a consistent value (such as com.google.activity.segment), and a data point straddles either end point of the dataset, only the overlapping portion of the data point will be deleted.
+#
+# DELETE /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
+# operationId: fitness.users.dataSources.datasets.delete
+export def "data-sources-datasets fitnessusersdataSourcesdatasetsdelete" [
+  userId: string
+  dataSourceId: string
+  datasetId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)/datasets/($datasetId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a dataset containing all data points whose start and end times overlap with the specified range of the dataset minimum start time and maximum end time. Specifically, any data point whose start time is less than or equal to the dataset end time and whose end time is greater than or equal to the dataset start time.
+#
+# GET /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
+# operationId: fitness.users.dataSources.datasets.get
+export def "data-sources-datasets fitnessusersdataSourcesdatasetsget" [
+  userId: string
+  dataSourceId: string
+  datasetId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --limit: int # If specified, no more than this many data points will be included in the dataset. If there are more data points in the dataset, nextPageToken will be set in the dataset response. The limit is applied from the end of the time range. That is, if pageToken is absent, the limit most recent data points will be returned.
+  --pageToken: string # The continuation token, which is used to page through large datasets. To get the next page of a dataset, set this parameter to the value of nextPageToken from the previous response. Each subsequent call will yield a partial dataset with data point end timestamps that are strictly smaller than those in the previous partial response.
+]: nothing -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)/datasets/($datasetId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds data points to a dataset. The dataset need not be previously created. All points within the given dataset will be returned with subsquent calls to retrieve this dataset. Data points can belong to more than one dataset. This method does not use patch semantics: the data points provided are merely inserted, with no existing data replaced.
+#
+# PATCH /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
+# operationId: fitness.users.dataSources.datasets.patch
+# --point item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
+export def "data-sources-datasets fitnessusersdataSourcesdatasetspatch" [
+  userId: string
+  dataSourceId: string
+  datasetId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body-dataSourceId: string # The data stream ID of the data source that created the points in this dataset.
+  --maxEndTimeNs: string # The largest end time of all data points in this possibly partial representation of the dataset. Time is in nanoseconds from epoch. This should also match the second part of the dataset identifier. (format: int64)
+  --minStartTimeNs: string # The smallest start time of all data points in this possibly partial representation of the dataset. Time is in nanoseconds from epoch. This should also match the first part of the dataset identifier. (format: int64)
+  --nextPageToken: string # This token will be set when a dataset is received in response to a GET request and the dataset is too large to be included in a single response. Provide this value in a subsequent GET request to return the next page of data points within this dataset.
+  --point: list # A partial list of data points contained in the dataset, ordered by endTimeNanos. This list is considered complete when retrieving a small dataset and partial when patching a dataset or retrieving a dataset that is too large to include in a single response. — item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
+]: any -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataSources/($dataSourceId)/datasets/($datasetId)" $qp)
+  let body = {dataSourceId: $body_dataSourceId, maxEndTimeNs: $maxEndTimeNs, minStartTimeNs: $minStartTimeNs, nextPageToken: $nextPageToken, point: $point} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Aggregates data of a certain type or stream into buckets divided by a given type of boundary. Multiple data sets of multiple types and from multiple sources can be aggregated into exactly one bucket type per request.
+#
+# POST /{userId}/dataset:aggregate
+# operationId: fitness.users.dataset.aggregate
+# --aggregateBy item shape: {dataSourceId?: string, dataTypeName?: string}
+# --bucketByActivitySegment shape: {activityDataSourceId?: string, minDurationMillis?: string}
+# --bucketByActivityType shape: {activityDataSourceId?: string, minDurationMillis?: string}
+# --bucketBySession shape: {minDurationMillis?: string}
+# --bucketByTime shape: {durationMillis?: string, period?: record}
+export def "dataset-aggregate fitnessusersdatasetaggregate" [
+  userId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --aggregateBy: list # The specification of data to be aggregated. At least one aggregateBy spec must be provided. All data that is specified will be aggregated using the same bucketing criteria. There will be one dataset in the response for every aggregateBy spec. — item shape: {dataSourceId?: string, dataTypeName?: string}
+  --bucketByActivitySegment: record # shape: {activityDataSourceId?: string, minDurationMillis?: string}
+  --bucketByActivityType: record # shape: {activityDataSourceId?: string, minDurationMillis?: string}
+  --bucketBySession: record # shape: {minDurationMillis?: string}
+  --bucketByTime: record # shape: {durationMillis?: string, period?: record}
+  --endTimeMillis: string # The end of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. The maximum allowed difference between start_time_millis // and end_time_millis is 7776000000 (roughly 90 days). (format: int64)
+  --filteredDataQualityStandard: list # DO NOT POPULATE THIS FIELD. It is ignored.
+  --startTimeMillis: string # The start of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. (format: int64)
+]: any -> record<bucket: table<activity: int, dataset: list, endTimeMillis: string, session: record, startTimeMillis: string, type: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/dataset:aggregate" $qp)
+  let body = {aggregateBy: $aggregateBy, bucketByActivitySegment: $bucketByActivitySegment, bucketByActivityType: $bucketByActivityType, bucketBySession: $bucketBySession, bucketByTime: $bucketByTime, endTimeMillis: $endTimeMillis, filteredDataQualityStandard: $filteredDataQualityStandard, startTimeMillis: $startTimeMillis} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists sessions previously created.
+#
+# GET /{userId}/sessions
+# operationId: fitness.users.sessions.list
+export def "sessions fitnessuserssessionslist" [
+  userId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --activityType: list # If non-empty, only sessions with these activity types should be returned.
+  --endTime: string # An RFC3339 timestamp. Only sessions ending between the start and end times will be included in the response. If this time is omitted but startTime is specified, all sessions from startTime to the end of time will be returned.
+  --includeDeleted: oneof<nothing, bool> # If true, and if both startTime and endTime are omitted, session deletions will be returned.
+  --pageToken: string # The continuation token, which is used for incremental syncing. To get the next batch of changes, set this parameter to the value of nextPageToken from the previous response. The page token is ignored if either start or end time is specified. If none of start time, end time, and the page token is specified, sessions modified in the last 30 days are returned.
+  --startTime: string # An RFC3339 timestamp. Only sessions ending between the start and end times will be included in the response. If this time is omitted but endTime is specified, all sessions from the start of time up to endTime will be returned.
+]: nothing -> record<deletedSession: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>, hasMoreData: bool, nextPageToken: string, session: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "activityType" $activityType "multi") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/sessions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a session specified by the given session ID.
+#
+# DELETE /{userId}/sessions/{sessionId}
+# operationId: fitness.users.sessions.delete
+export def "sessions fitnessuserssessionsdelete" [
+  userId: string
+  sessionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/sessions/($sessionId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates or insert a given session.
+#
+# PUT /{userId}/sessions/{sessionId}
+# operationId: fitness.users.sessions.update
+# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+export def "sessions fitnessuserssessionsupdate" [
+  userId: string
+  sessionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --activeTimeMillis: string # Session active time. While start_time_millis and end_time_millis define the full session time, the active time can be shorter and specified by active_time_millis. If the inactive time during the session is known, it should also be inserted via a com.google.activity.segment data point with a STILL activity value (format: int64)
+  --activityType: int # The type of activity this session represents. (format: int32)
+  --application: record # shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
+  --description: string # A description for this session.
+  --endTimeMillis: string # An end time, in milliseconds since epoch, inclusive. (format: int64)
+  --id: string # A client-generated identifier that is unique across all sessions owned by this particular user.
+  --modifiedTimeMillis: string # A timestamp that indicates when the session was last modified. (format: int64)
+  --name: string # A human readable name of the session.
+  --startTimeMillis: string # A start time, in milliseconds since epoch, inclusive. (format: int64)
+]: any -> record<activeTimeMillis: string, activityType: int, application: record<detailsUrl: string, name: string, packageName: string, version: string>, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/($userId)/sessions/($sessionId)" $qp)
+  let body = {activeTimeMillis: $activeTimeMillis, activityType: $activityType, application: $application, description: $description, endTimeMillis: $endTimeMillis, id: $id, modifiedTimeMillis: $modifiedTimeMillis, name: $name, startTimeMillis: $startTimeMillis} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

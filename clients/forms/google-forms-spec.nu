@@ -1,0 +1,439 @@
+# Auto-generated client for Google Forms API vv1
+# Source: https://api.apis.guru/v2/specs/googleapis.com/forms/v1/openapi.json
+# Auth: --token flag or $env.GOOGLE_FORMS_API_TOKEN
+
+const BASE_URL = "https://forms.googleapis.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GOOGLE_FORMS_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://forms.googleapis.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def xgafv-completer [] { ["1" "2"] }
+def alt-completer [] { ["json" "media" "proto"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forms formsformscreate" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Create a new form using the title given in the provided form message in the request. *Important:* Only the form.info.title and form.info.document_title fields are copied to the new form. All other fields including the form description, items and settings are disallowed. To create a new form and add items, you must first call forms.create to create an empty form with a title and (optional) document title, and then call forms.update to add the items.
+#
+# POST /v1/forms
+# operationId: forms.forms.create
+# --info shape: {description?: string, title?: string}
+# --items item shape: {description?: string, imageItem?: record, itemId?: string, pageBreakItem?: record, questionGroupItem?: record, questionItem?: record, textItem?: record, title?: string, videoItem?: record}
+# --settings shape: {quizSettings?: record}
+export def "forms formsformscreate" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --info: record # The general information for a form. — shape: {description?: string, title?: string}
+  --items: list # Required. A list of the form's items, which can include section headers, questions, embedded media, etc. — item shape: {description?: string, imageItem?: record, itemId?: string, pageBreakItem?: record, questionGroupItem?: record, questionItem?: record, textItem?: record, title?: string, videoItem?: record}
+  --settings: record # A form's settings. — shape: {quizSettings?: record}
+]: any -> record<formId: string, info: record<description: string, documentTitle: string, title: string>, items: table<description: string, imageItem: record, itemId: string, pageBreakItem: record, questionGroupItem: record, questionItem: record, textItem: record, title: string, videoItem: record>, linkedSheetId: string, responderUri: string, revisionId: string, settings: record<quizSettings: record<isQuiz: bool>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/forms" $qp)
+  let body = {info: $info, items: $items, settings: $settings} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get a form.
+#
+# GET /v1/forms/{formId}
+# operationId: forms.forms.get
+export def "forms formsformsget" [
+  formId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<formId: string, info: record<description: string, documentTitle: string, title: string>, items: table<description: string, imageItem: record, itemId: string, pageBreakItem: record, questionGroupItem: record, questionItem: record, textItem: record, title: string, videoItem: record>, linkedSheetId: string, responderUri: string, revisionId: string, settings: record<quizSettings: record<isQuiz: bool>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List a form's responses.
+#
+# GET /v1/forms/{formId}/responses
+# operationId: forms.forms.responses.list
+export def "forms-responses formsformsresponseslist" [
+  formId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Which form responses to return. Currently, the only supported filters are: * timestamp > *N* which means to get all form responses submitted after (but not at) timestamp *N*. * timestamp >= *N* which means to get all form responses submitted at and after timestamp *N*. For both supported filters, timestamp must be formatted in RFC3339 UTC "Zulu" format. Examples: "2014-10-02T15:01:23Z" and "2014-10-02T15:01:23.045123456Z".
+  --pageSize: int # The maximum number of responses to return. The service may return fewer than this value. If unspecified or zero, at most 5000 responses are returned.
+  --pageToken: string # A page token returned by a previous list response. If this field is set, the form and the values of the filter must be the same as for the original request.
+]: nothing -> record<nextPageToken: string, responses: table<answers: record, createTime: string, formId: string, lastSubmittedTime: string, respondentEmail: string, responseId: string, totalScore: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/responses" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get one response from the form.
+#
+# GET /v1/forms/{formId}/responses/{responseId}
+# operationId: forms.forms.responses.get
+export def "forms-responses formsformsresponsesget" [
+  formId: string
+  responseId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<answers: record, createTime: string, formId: string, lastSubmittedTime: string, respondentEmail: string, responseId: string, totalScore: float> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/responses/($responseId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return a list of the watches owned by the invoking project. The maximum number of watches is two: For each invoker, the limit is one for each event type per form.
+#
+# GET /v1/forms/{formId}/watches
+# operationId: forms.forms.watches.list
+export def "forms-watches formsformswatcheslist" [
+  formId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<watches: table<createTime: string, errorType: string, eventType: string, expireTime: string, id: string, state: string, target: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/watches" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a new watch. If a watch ID is provided, it must be unused. For each invoking project, the per form limit is one watch per Watch.EventType. A watch expires seven days after it is created (see Watch.expire_time).
+#
+# POST /v1/forms/{formId}/watches
+# operationId: forms.forms.watches.create
+# --watch shape: {eventType?: "EVENT_TYPE_UNSPECIFIED"|"SCHEMA"|"RESPONSES", target?: record}
+export def "forms-watches formsformswatchescreate" [
+  formId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --watch: record # A watch for events for a form. When the designated event happens, a notification will be published to the specified target. The notification's attributes will include a `formId` key that has the ID of the watched form and an `eventType` key that has the string of the type. Messages are sent with at-least-once delivery and are only dropped in extraordinary circumstances. Typically all notifications should be reliably delivered within a few seconds; however, in some situations notifications may be delayed. A watch expires seven days after it is created unless it is renewed with watches.renew — shape: {eventType?: "EVENT_TYPE_UNSPECIFIED"|"SCHEMA"|"RESPONSES", target?: record}
+  --watchId: string # The ID to use for the watch. If specified, the ID must not already be in use. If not specified, an ID is generated. This value should be 4-63 characters, and valid characters are /a-z-/.
+]: any -> record<createTime: string, errorType: string, eventType: string, expireTime: string, id: string, state: string, target: record<topic: record<topicName: string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/watches" $qp)
+  let body = {watch: $watch, watchId: $watchId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete a watch.
+#
+# DELETE /v1/forms/{formId}/watches/{watchId}
+# operationId: forms.forms.watches.delete
+export def "forms-watches formsformswatchesdelete" [
+  formId: string
+  watchId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/watches/($watchId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Renew an existing watch for seven days. The state of the watch after renewal is `ACTIVE`, and the `expire_time` is seven days from the renewal. Renewing a watch in an error state (e.g. `SUSPENDED`) succeeds if the error is no longer present, but fail otherwise. After a watch has expired, RenewWatch returns `NOT_FOUND`.
+#
+# POST /v1/forms/{formId}/watches/{watchId}:renew
+# operationId: forms.forms.watches.renew
+export def "forms-watches formsformswatchesrenew" [
+  formId: string
+  watchId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body: record
+]: any -> record<createTime: string, errorType: string, eventType: string, expireTime: string, id: string, state: string, target: record<topic: record<topicName: string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId)/watches/($watchId):renew" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Change the form with a batch of updates.
+#
+# POST /v1/forms/{formId}:batchUpdate
+# operationId: forms.forms.batchUpdate
+# --requests item shape: {createItem?: record, deleteItem?: record, moveItem?: record, updateFormInfo?: record, updateItem?: record, updateSettings?: record}
+# --writeControl shape: {requiredRevisionId?: string, targetRevisionId?: string}
+export def "forms formsformsbatchUpdate" [
+  formId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --includeFormInResponse: oneof<nothing, bool> # Whether to return an updated version of the model in the response.
+  --requests: list # Required. The update requests of this batch. — item shape: {createItem?: record, deleteItem?: record, moveItem?: record, updateFormInfo?: record, updateItem?: record, updateSettings?: record}
+  --writeControl: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string, targetRevisionId?: string}
+]: any -> record<form: record<formId: string, info: record<description: string, documentTitle: string, title: string>, items: list<record>, linkedSheetId: string, responderUri: string, revisionId: string, settings: record<quizSettings: record>>, replies: table<createItem: record>, writeControl: record<requiredRevisionId: string, targetRevisionId: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/forms/($formId):batchUpdate" $qp)
+  let body = {includeFormInResponse: $includeFormInResponse, requests: $requests, writeControl: $writeControl} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

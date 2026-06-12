@@ -1,0 +1,9562 @@
+# Auto-generated client for App Center Client vv0.1
+# Source: https://api.apis.guru/v2/specs/appcenter.ms/v0.1/openapi.json
+# Auth: --token flag or $env.APP_CENTER_CLIENT_TOKEN
+
+const BASE_URL = "https://api.appcenter.ms"
+const DEFAULT_AUTH = "x-api-token"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o APP_CENTER_CLIENT_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "x-api-token" => { {headers: {X-API-Token: $token_val}, query: ""} }
+    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://api.appcenter.ms"] }
+def auth-scheme-completer [] { ["x-api-token" "basic"] }
+
+# Completers for enum parameters
+def orderBy-completer [] { ["display_name" "name"] }
+def os-completer [] { ["Android" "Custom" "Linux" "Tizen" "Windows" "iOS" "macOS" "tvOS"] }
+def platform-completer [] { ["Cordova" "Custom" "Electron" "Java" "Objective-C-Swift" "React-Native" "UWP" "Unity" "WPF" "WinForms" "Xamarin"] }
+def inlinecount-completer [] { ["allpages" "none"] }
+def service-completer [] { ["Build" "Test"] }
+def period-completer [] { ["Current" "Next" "Previous"] }
+def trigger-completer [] { ["continous" "continuous" "manual"] }
+def format-completer [] { ["json" "yaml"] }
+def os-completer-1 [] { ["Android" "Windows" "iOS" "macOS"] }
+def platform-completer-1 [] { ["Java" "Objective-C-Swift" "React-Native" "UWP" "Xamarin"] }
+def status-completer [] { ["cancelling"] }
+def group-type-completer [] { ["GroupType1" "GroupType2"] }
+def group-status-completer [] { ["closed" "ignored" "open"] }
+def orderby-completer [] { ["count asc" "count desc" "display_id asc" "display_id desc" "impacted_users asc" "impacted_users desc" "last_occurrence asc" "last_occurrence desc"] }
+def status-completer-1 [] { ["closed" "ignored" "open"] }
+def error-type-completer [] { ["CrashingErrors" "HandledErrors"] }
+def track-completer [] { ["alpha" "beta" "production" "testflight-external" "testflight-internal"] }
+def type-completer [] { ["apple" "googleplay" "intune"] }
+def errorType-completer [] { ["all" "handledError" "unhandledError"] }
+def errorType-completer-1 [] { ["handledError" "unhandledError"] }
+def order-completer [] { ["asc" "desc"] }
+def sort-completer [] { ["exceptionClassName" "exceptionMessage" "exceptionMethod" "lastOccurrence" "matchingReportsCount"] }
+def state-completer [] { ["closed" "ignored" "open"] }
+def format-completer-1 [] { ["json" "txt"] }
+def sort-completer-1 [] { ["deviceName" "errorGroupId" "exceptionClassName" "exceptionFile" "exceptionLine" "exceptionMessage" "exceptionMethod" "osVersion" "timestamp" "userId"] }
+def type-completer-1 [] { ["application_insights_instrumentation_key" "application_insights_linked_subscription" "blob_storage_connection_string" "blob_storage_linked_subscription"] }
+def role-completer [] { ["admin" "collaborator" "member"] }
+def form-completer [] { ["full" "lite"] }
+def status-completer-2 [] { ["all" "processed" "uploaded"] }
+def symbol-type-completer [] { ["AndroidProguard" "Apple" "Breakpad" "JavaScript" "UWP"] }
+def status-completer-3 [] { ["aborted" "committed"] }
+def file-type-completer [] { ["app-file" "dsym-file" "test-file"] }
+def tools-completer [] { ["node" "xamarin" "xcode"] }
+def upload-status-completer [] { ["uploadCanceled" "uploadFinished"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v01-account-test-export gdprExportAccounts" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Lists all the endpoints available for Test accounts data
+#
+# GET /v0.1/account/test/export
+# operationId: test_gdprExportAccounts
+export def "v01-account-test-export gdprExportAccounts" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<resources: table<path: string, rel: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/account/test/export")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists account data
+#
+# GET /v0.1/account/test/export/accounts
+# operationId: test_gdprExportAccount
+export def "v01-account-test-export-accounts gdprExportAccount" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/account/test/export/accounts")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists feature flag data
+#
+# GET /v0.1/account/test/export/featureFlags
+# operationId: test_gdprExportFeatureFlag
+export def "v01-account-test-export-feature-flags gdprExportFeatureFlag" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<name: string, target_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/account/test/export/featureFlags")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list organizations in which the requesting user is an admin
+#
+# GET /v0.1/administeredOrgs
+# operationId: organizations_listAdministered
+export def "v01-administered-orgs listAdministered" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<organizations: record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/administeredOrgs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns api tokens for the authenticated user
+#
+# GET /v0.1/api_tokens
+# operationId: userApiTokens_list
+export def "v01-api-tokens list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<created_at: string, description: string, id: string, scope: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/api_tokens")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new User API token
+#
+# POST /v0.1/api_tokens
+# operationId: userApiTokens_new
+export def "v01-api-tokens new" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # The description of the token
+  --scope: list # The scope for this token.
+]: any -> record<api_token: string, created_at: string, description: string, id: string, scope: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/api_tokens")
+  let body = {description: $description, scope: $scope} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the user api_token object with the specific id
+#
+# DELETE /v0.1/api_tokens/{api_token_id}
+# operationId: userApiTokens_delete
+export def "v01-api-tokens delete" [
+  api_token_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/api_tokens/($api_token_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of apps
+#
+# GET /v0.1/apps
+# operationId: apps_list
+export def "v01-apps list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --orderBy: string@orderBy-completer # The name of the attribute by which to order the response by. By default, apps are in order of creation. All results are ordered in ascending order.
+]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v0.1/apps" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new app and returns it to the caller
+#
+# POST /v0.1/apps
+# operationId: apps_create
+export def "v01-apps create" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # A short text describing the app
+  display_name: string # The descriptive name of the app. This can contain any characters
+  --name: string # The name of the app used in URLs
+  os: string@os-completer # The OS the app will be running on
+  platform: string@platform-completer # The platform of the app
+  --release-type: string # A one-word descriptive release-type value that starts with a capital letter but is otherwise lowercase
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/apps")
+  let body = {description: $description, display_name: $display_name, name: $name, os: $os, platform: $platform, release_type: $release_type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete an app
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}
+# operationId: apps_delete
+export def "v01-apps delete" [
+  app_name: string
+  owner_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return a specific app with the given app name which belongs to the given owner.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}
+# operationId: apps_get
+export def "v01-apps get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Partially updates a single app
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}
+# operationId: apps_update
+export def "v01-apps update" [
+  app_name: string
+  owner_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # A short text describing the app
+  --display-name: string # The display name of the app
+  --icon-asset-id: string # The uuid for the icon's asset id from ACFUS (format: uuid)
+  --icon-url: string # The string representation of the URL pointing to the app's icon
+  --name: string # The name of the app used in URLs
+  --release-type: string # A one-word descriptive release type value that starts with a capital letter but is otherwise lowercase
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
+  let body = {description: $description, display_name: $display_name, icon_asset_id: $icon_asset_id, icon_url: $icon_url, name: $name, release_type: $release_type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Count of active devices by interval in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/active_device_counts
+# operationId: Analytics_DeviceCounts
+export def "v01-apps-analytics-active-device-counts DeviceCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+  --app-build: string # Application build number. If build number is specified than multiple versions are not allowed. (format: string)
+]: nothing -> record<daily: table<count: int, datetime: string>, monthly: table<count: int, datetime: string>, weekly: table<count: int, datetime: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/active_device_counts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get list of audiences.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences
+# operationId: Analytics_ListAudiences
+export def "v01-apps-analytics-audiences ListAudiences" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --include-disabled: oneof<nothing, bool> # Include disabled audience definitions
+]: nothing -> record<nextLink: string, values: table<definition: string, description: string, estimated_count: int, name: string, state: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "include_disabled" $include_disabled "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Tests audience definition.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/definition/test
+# operationId: Analytics_TestAudience
+export def "v01-apps-analytics-audiences-definition-test TestAudience" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --custom-properties: record # Custom properties used in the definition.
+  definition: string # Audience definition in OData format.
+  --description: string # Audience description.
+  --enabled: oneof<nothing, bool> # default: true
+]: any -> record<custom_properties: record, definition: string, estimated_count: int, estimated_total_count: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/definition/test")
+  let body = {custom_properties: $custom_properties, definition: $definition, description: $description, enabled: $enabled} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get list of custom properties.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/custom_properties
+# operationId: Analytics_ListCustomProperties
+export def "v01-apps-analytics-audiences-metadata-custom-properties ListCustomProperties" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<values: record> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/custom_properties")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get list of device properties.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties
+# operationId: Analytics_ListDeviceProperties
+export def "v01-apps-analytics-audiences-metadata-device-properties ListDeviceProperties" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<values: record> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/device_properties")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get list of device property values.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties/{property_name}/values
+# operationId: Analytics_ListDevicePropertyValues
+export def "v01-apps-analytics-audiences-metadata-device-properties-values ListDevicePropertyValues" [
+  property_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --contains: string # Contains string
+]: nothing -> record<values: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "contains" $contains "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/device_properties/($property_name)/values" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes audience definition.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
+# operationId: Analytics_DeleteAudience
+export def "v01-apps-analytics-audiences DeleteAudience" [
+  audience_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets audience definition.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
+# operationId: Analytics_GetAudience
+export def "v01-apps-analytics-audiences GetAudience" [
+  audience_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<custom_properties: record, enabled: bool, estimated_total_count: int, timestamp: string, definition: string, description: string, estimated_count: int, name: string, state: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns whether audience definition exists.
+#
+# HEAD /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
+# operationId: Analytics_AudienceNameExists
+export def "v01-apps-analytics-audiences AudienceNameExists" [
+  audience_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates or updates audience definition.
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
+# operationId: Analytics_CreateOrUpdateAudience
+export def "v01-apps-analytics-audiences CreateOrUpdateAudience" [
+  audience_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --custom-properties: record # Custom properties used in the definition.
+  definition: string # Audience definition in OData format.
+  --description: string # Audience description.
+  --enabled: oneof<nothing, bool> # default: true
+]: any -> record<custom_properties: record, enabled: bool, estimated_total_count: int, timestamp: string, definition: string, description: string, estimated_count: int, name: string, state: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let body = {custom_properties: $custom_properties, definition: $definition, description: $description, enabled: $enabled} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Available for UWP apps only.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crash_counts
+# DEPRECATED
+# operationId: Analytics_CrashCounts
+@deprecated
+export def "v01-apps-analytics-crash-counts CrashCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<count: int, crashes: table<count: int, datetime: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_counts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Overall crashes and affected users count of the selected crash groups with selected versions.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups
+# operationId: Analytics_CrashGroupsTotals
+# --crash_groups item shape: {app_version?: string, crash_group_id?: string}
+export def "v01-apps-analytics-crash-groups CrashGroupsTotals" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  crash_groups: list # item shape: {app_version?: string, crash_group_id?: string}
+]: any -> table<app_version: string, crash_group_id: string, overall: record<crash_count: int, device_count: int>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups")
+  let body = {crash_groups: $crash_groups} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Available for UWP apps only.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/crash_counts
+# DEPRECATED
+# operationId: Analytics_CrashGroupCounts
+@deprecated
+export def "v01-apps-analytics-crash-groups-crash-counts CrashGroupCounts" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+]: nothing -> record<count: int, crashes: table<count: int, datetime: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/crash_counts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Available for UWP apps only.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/models
+# DEPRECATED
+# operationId: Analytics_CrashGroupModelCounts
+@deprecated
+export def "v01-apps-analytics-crash-groups-models CrashGroupModelCounts" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+]: nothing -> record<crash_count: int, models: table<crash_count: int, model_name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/models" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Available for UWP apps only.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/operating_systems
+# DEPRECATED
+# operationId: Analytics_CrashGroupOperatingSystemCounts
+@deprecated
+export def "v01-apps-analytics-crash-groups-operating-systems CrashGroupOperatingSystemCounts" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+]: nothing -> record<crash_count: int, operating_systems: table<crash_count: int, operating_system_name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/operating_systems" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Available for UWP apps only.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/overall
+# DEPRECATED
+# operationId: Analytics_CrashGroupTotals
+@deprecated
+export def "v01-apps-analytics-crash-groups-overall CrashGroupTotals" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+]: nothing -> record<crash_count: int, device_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/overall" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Percentage of crash-free device by day in the time range based on the selected versions. Api will return -1 if crash devices is greater than active devices.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/crashfree_device_percentages
+# DEPRECATED
+# operationId: Analytics_CrashFreeDevicePercentages
+@deprecated
+export def "v01-apps-analytics-crashfree-device-percentages CrashFreeDevicePercentages" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --version: string # format: string
+]: nothing -> record<average_percentage: float, daily_percentages: table<datetime: string, percentage: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crashfree_device_percentages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of total downloads for the provided distribution releases.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/analytics/distribution/release_counts
+# operationId: Analytics_DistributionReleaseCounts
+# --releases item shape: {distribution_group?: string, release: string}
+export def "v01-apps-analytics-distribution-release-counts DistributionReleaseCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  releases: list # item shape: {distribution_group?: string, release: string}
+]: any -> record<counts: table<distribution_group: string, release_id: string, total_count: int, unique_count: int>, total: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/distribution/release_counts")
+  let body = {releases: $releases} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the set of Events with the specified event names.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/event_logs/{event_name}
+# operationId: Analytics_EventsDeleteLogs
+export def "v01-apps-analytics-event-logs EventsDeleteLogs" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: int, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/event_logs/($event_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of active events in the time range ordered by event.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events
+# operationId: Analytics_Events
+export def "v01-apps-analytics-events Events" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+  --event-name: list # To select the specific events.
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
+  --inlinecount: string@inlinecount-completer # Controls whether or not to include a count of all the items across all pages. (default: none)
+  --orderby: string # controls the sorting order and sorting based on which column (default: count desc)
+]: nothing -> record<events: table<count: int, count_per_device: float, count_per_session: float, device_count: int, id: string, name: string, previous_count: int, previous_device_count: int>, total: int, total_devices: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "event_name" $event_name "pipes") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete the set of Events with the specified event names.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}
+# operationId: Analytics_EventsDelete
+export def "v01-apps-analytics-events EventsDelete" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: int, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of events per device by interval in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_device
+# operationId: Analytics_EventPerDeviceCount
+export def "v01-apps-analytics-events-count-per-device EventPerDeviceCount" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<avg_count_per_device: float, count_per_device: table<count: float, datetime: string>, previous_avg_count_per_device: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/count_per_device" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of events per session by interval in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_session
+# operationId: Analytics_EventPerSessionCount
+export def "v01-apps-analytics-events-count-per-session EventPerSessionCount" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<avg_count_per_session: float, count_per_session: table<count: float, datetime: string>, previous_avg_count_per_session: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/count_per_session" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of devices for an event by interval in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/device_count
+# operationId: Analytics_EventDeviceCount
+export def "v01-apps-analytics-events-device-count EventDeviceCount" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<devices_count: table<count: int, datetime: string>, previous_total_devices_with_event: int, total_devices: int, total_devices_with_event: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/device_count" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of events by interval in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/event_count
+# operationId: Analytics_EventCount
+export def "v01-apps-analytics-events-event-count EventCount" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<count: table<count: int, datetime: string>, previous_total_count: int, total_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/event_count" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Event properties.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties
+# operationId: Analytics_EventProperties
+export def "v01-apps-analytics-events-properties EventProperties" [
+  event_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<event_properties: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/properties")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Event properties value counts during the time range in descending order.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties/{event_property_name}/counts
+# operationId: Analytics_EventPropertyCounts
+export def "v01-apps-analytics-events-properties-counts EventPropertyCounts" [
+  event_name: string
+  event_property_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+  --top: int # The number of property values to return. Set to 0 in order to fetch all results available. (format: int64, default: 10)
+]: nothing -> record<total: int, values: table<count: int, name: string, previous_count: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/properties/($event_property_name)/counts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Logs received between the specified start time and the current time. The API will return a maximum of 100 logs per call.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/generic_log_flow
+# operationId: Analytics_GenericLogFlow
+export def "v01-apps-analytics-generic-log-flow GenericLogFlow" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. It must be within the current day in the UTC timezone. The default value is the start time of the current day in UTC timezone. (format: date-time)
+]: nothing -> record<exceeded_max_limit: bool, last_received_log_timestamp: string, logs: table<account_id: string, auth_provider: string, device: record, event_id: string, event_name: string, install_id: string, message_id: string, properties: record, session_id: string, timestamp: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/generic_log_flow" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Languages in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/languages
+# operationId: Analytics_LanguageCounts
+export def "v01-apps-analytics-languages LanguageCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --versions: list # To select specific application versions
+]: nothing -> record<languages: table<count: int, language_name: string, previous_count: int>, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/languages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Logs received between the specified start time and the current time. The API will return a maximum of 100 logs per call.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/log_flow
+# operationId: Analytics_LogFlow
+export def "v01-apps-analytics-log-flow LogFlow" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. It must be within the current day in the UTC timezone. The default value is the start time of the current day in UTC timezone. (format: date-time)
+]: nothing -> record<exceeded_max_limit: bool, last_received_log_timestamp: string, logs: table<device: record, install_id: string, timestamp: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/log_flow" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Models in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/models
+# operationId: Analytics_ModelCounts
+export def "v01-apps-analytics-models ModelCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --versions: list # To select specific application versions
+]: nothing -> record<models: table<count: int, model_name: string, previous_count: int>, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/models" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# OSes in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/oses
+# operationId: Analytics_OperatingSystemCounts
+export def "v01-apps-analytics-oses OperatingSystemCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --versions: list # To select specific application versions
+]: nothing -> record<oses: table<count: int, os_name: string, previous_count: int>, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/oses" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Places in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/places
+# operationId: Analytics_PlaceCounts
+export def "v01-apps-analytics-places PlaceCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --versions: list # To select specific application versions
+]: nothing -> record<places: table<code: string, count: int, previous_count: int>, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/places" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of sessions in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_counts
+# operationId: Analytics_SessionCounts
+export def "v01-apps-analytics-session-counts SessionCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> table<count: int, datetime: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/session_counts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets session duration.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_durations_distribution
+# operationId: Analytics_SessionDurationsDistribution
+export def "v01-apps-analytics-session-durations-distribution SessionDurationsDistribution" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<average_duration: string, distribution: table<bucket: string, count: int>, previous_average_duration: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/session_durations_distribution" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of sessions per device in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/sessions_per_device
+# operationId: Analytics_PerDeviceCounts
+export def "v01-apps-analytics-sessions-per-device PerDeviceCounts" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --versions: list # To select specific application versions
+]: nothing -> record<average_sessions_per_user: float, previous_average_sessions_per_user: float, previous_total_count: int, sessions_per_user: table<count: float, datetime: string>, total_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/sessions_per_device" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of active versions in the time range ordered by version.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/analytics/versions
+# operationId: Analytics_Versions
+export def "v01-apps-analytics-versions Versions" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
+  --versions: list # To select specific application versions
+]: nothing -> record<total: int, versions: table<count: int, previous_count: int, version: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/versions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns App API tokens for the app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/api_tokens
+# operationId: appApiTokens_list
+export def "v01-apps-api-tokens list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<created_at: string, description: string, id: string, scope: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new App API token
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/api_tokens
+# operationId: appApiTokens_new
+export def "v01-apps-api-tokens new" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # The description of the token
+  --scope: list # The scope for this token.
+]: any -> record<api_token: string, created_at: string, description: string, id: string, scope: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens")
+  let body = {description: $description, scope: $scope} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the App Api Token object with the specific ID
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/api_tokens/{api_token_id}
+# operationId: appApiTokens_delete
+export def "v01-apps-api-tokens delete" [
+  owner_name: string
+  app_name: string
+  api_token_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens/($api_token_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete mapping of apple app to an existing app in apple store.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/apple_mapping
+# operationId: appleMapping_delete
+export def "v01-apps-apple-mapping delete" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get mapping of apple app to an existing app in apple store.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/apple_mapping
+# operationId: appleMapping_get
+export def "v01-apps-apple-mapping get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_id: string, apple_id: string, service_connection_id: string, team_identifier: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a mapping for an existing app in apple store for the specified application.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/apple_mapping
+# operationId: appleMapping_create
+export def "v01-apps-apple-mapping create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --apple-id: string # ID of the apple application in apple store, takes precedence over bundle_identifier when both are provided
+  --bundle-identifier: string # Bundle Identifier of the apple package
+  service_connection_id: string # Id for the shared service connection. In case of Apple AppStore, this connection will be used to create and connect to the Apple AppStore in Mobile Center.
+  team_identifier: string # ID of the Team associated with the app in apple store
+]: any -> record<app_id: string, apple_id: string, service_connection_id: string, team_identifier: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
+  let body = {apple_id: $apple_id, bundle_identifier: $bundle_identifier, service_connection_id: $service_connection_id, team_identifier: $team_identifier} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Fetch all apple test flight groups
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/apple_test_flight_groups
+# DEPRECATED
+# operationId: appleMapping_TestFlightGroups
+@deprecated
+export def "v01-apps-apple-test-flight-groups TestFlightGroups" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<appleId: float, id: string, name: string, providerId: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_test_flight_groups")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes the uploaded app avatar
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/avatar
+# operationId: apps_deleteAvatar
+export def "v01-apps-avatar delete" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/avatar")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Sets the app avatar
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/avatar
+# operationId: apps_updateAvatar
+export def "v01-apps-avatar updateAvatar" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --avatar: string # The image for an app avatar to upload. (format: binary)
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/avatar")
+  let body = {avatar: $avatar} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Returns a list of azure subscriptions for the app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions
+# operationId: azureSubscription_listForApp
+export def "v01-apps-azure-subscriptions listForApp" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Link azure subscription to an app
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions
+# operationId: azureSubscription_linkForApp
+export def "v01-apps-azure-subscriptions linkForApp" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  subscription_id: string # The azure subscription id (format: uuid)
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions")
+  let body = {subscription_id: $subscription_id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the azure subscriptions for the app
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions/{azure_subscription_id}
+# operationId: azureSubscription_deleteForApp
+export def "v01-apps-azure-subscriptions delete" [
+  azure_subscription_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions/($azure_subscription_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Aggregated Billing Information for owner of a given app.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/billing/aggregated
+# operationId: billingAggregatedInformation_getByApp
+export def "v01-apps-billing-aggregated get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --service: string@service-completer # Type of service that should be included in the Billing Information
+  --period: string@period-completer # Type of period that should be included in the Billing Information
+  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+]: nothing -> record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>, testService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>>, id: string, timestamp: string, usage: record<buildService: record<currentUsagePeriod: record>, testService: record<currentUsagePeriod: record>>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/billing/aggregated" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the list of Git branches for this application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/branches
+# operationId: builds_listBranches
+export def "v01-apps-branches listBranches" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<configured: bool, lastBuild: record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the list of builds for the branch
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
+# operationId: builds_listByBranch
+export def "v01-apps-branches-builds listByBranch" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/builds")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a build
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
+# operationId: builds_create
+export def "v01-apps-branches-builds create" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --debug: oneof<nothing, bool> # Run build in debug mode
+  --sourceVersion: string # Version to build which represents the full Git commit reference
+]: any -> record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/builds")
+  let body = {debug: $debug, sourceVersion: $sourceVersion} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the branch build configuration
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
+# operationId: branchConfigurations_delete
+export def "v01-apps-branches-config delete" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the branch configuration
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
+# operationId: branchConfigurations_get
+export def "v01-apps-branches-config get" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Configures the branch for build
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
+# operationId: branchConfigurations_create
+# --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
+# --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
+export def "v01-apps-branches-config create" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --artifactVersioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
+  --badgeIsEnabled: oneof<nothing, bool>
+  --cloneFromBranch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
+  --signed: oneof<nothing, bool>
+  --testsEnabled: oneof<nothing, bool>
+  --toolsets: any # The branch build configuration for each toolset — shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
+  --trigger: string@trigger-completer
+]: any -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let body = {artifactVersioning: $artifactVersioning, badgeIsEnabled: $badgeIsEnabled, cloneFromBranch: $cloneFromBranch, signed: $signed, testsEnabled: $testsEnabled, toolsets: $toolsets, trigger: $trigger} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Reconfigures the branch for build
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
+# operationId: branchConfigurations_update
+# --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
+# --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
+export def "v01-apps-branches-config update" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --artifactVersioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
+  --badgeIsEnabled: oneof<nothing, bool>
+  --cloneFromBranch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
+  --signed: oneof<nothing, bool>
+  --testsEnabled: oneof<nothing, bool>
+  --toolsets: any # The branch build configuration for each toolset — shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
+  --trigger: string@trigger-completer
+]: any -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let body = {artifactVersioning: $artifactVersioning, badgeIsEnabled: $badgeIsEnabled, cloneFromBranch: $cloneFromBranch, signed: $signed, testsEnabled: $testsEnabled, toolsets: $toolsets, trigger: $trigger} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the build configuration in Azure pipeline YAML format
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/export_config
+# operationId: buildConfigurations_get
+export def "v01-apps-branches-export-config get" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --format: string@format-completer # Configuration format (default: yaml)
+]: nothing -> record<yaml: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/export_config" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the projects in the repository for the branch, for all toolsets
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/toolset_projects
+# operationId: builds_listToolsetProjects
+export def "v01-apps-branches-toolset-projects listToolsetProjects" [
+  branch: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --os: string@os-completer-1 # The desired OS for the project scan; normally the same as the app OS
+  --platform: string@platform-completer-1 # The desired platform for the project scan
+  --maxSearchDepth: int # The depth of the repository to search for project files
+]: nothing -> record<android: record<androidModules: list<record>, gradleWrapperPath: string>, buildscripts: any, commit: string, javascript: record<javascriptSolutions: list<record>, packageJsonPaths: list<string>>, testcloud: record<projects: list<record>>, uwp: record<uwpSolutions: list<record>>, xamarin: record<xamarinSolutions: list<record>>, xcode: record<xcodeSchemeContainers: list<record>>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "os" $os "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "maxSearchDepth" $maxSearchDepth "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/toolset_projects" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get bug tracker settings for a particular app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/bugtracker
+# operationId: bugtracker_getSettings
+export def "v01-apps-bugtracker get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<event_types: list<string>, settings: record<callback_url: string, owner_name: string, type: string>, state: string, token_id: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/bugtracker")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get project issue related to a crash group
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/bugtracker/crashGroup/{crash_group_id}
+# operationId: bugTracker_getRepoIssueFromCrash
+export def "v01-apps-bugtracker-crash-group get" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<bug_tracker_type: string, event_type: string, id: string, mobile_center_id: string, repo_name: string, title: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/bugtracker/crashGroup/($crash_group_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Application specific build service status
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/build_service_status
+# operationId: builds_getStatusByAppId
+export def "v01-apps-build-service-status get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<message: string, os: string, service: string, status: string, url: string, valid_until: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/build_service_status")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the build detail for the given build ID
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
+# operationId: builds_get
+export def "v01-apps-builds get" [
+  build_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Cancels a build
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
+# operationId: builds_update
+export def "v01-apps-builds update" [
+  build_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --status: string@status-completer # The build status; used to cancel builds
+]: any -> record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)")
+  let body = {status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Distribute a build
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/distribute
+# operationId: builds_distribute
+# --destinations item shape: {id: string, type: "store"|"group"|"tester"}
+export def "v01-apps-builds-distribute distribute" [
+  build_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --destinations: list # Array of objects {id:string, type:string} with "id" being the distribution group ID, store ID, or tester email, and "type" being "group", "store", or "tester" — item shape: {id: string, type: "store"|"group"|"tester"}
+  --mandatoryUpdate: oneof<nothing, bool>
+  --notifyTesters: oneof<nothing, bool> # default: true
+  --releaseNotes: string # The release notes
+]: any -> record<status: string, upload_id: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/distribute")
+  let body = {destinations: $destinations, mandatoryUpdate: $mandatoryUpdate, notifyTesters: $notifyTesters, releaseNotes: $releaseNotes} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the download URI
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/downloads/{download_type}
+# operationId: builds_getDownloadUri
+export def "v01-apps-builds-downloads get" [
+  build_id: int
+  download_type: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/downloads/($download_type)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the build log
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/logs
+# operationId: builds_getLog
+export def "v01-apps-builds-logs get" [
+  build_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<value: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/logs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns commit information for a batch of shas
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/commits/batch
+# operationId: commits_listByShaList
+export def "v01-apps-commits-batch listByShaList" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --hashes: list # A collection of commit SHAs comma-delimited
+]: nothing -> list<record> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "hashes" $hashes "csv")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/commits/batch" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a list of crash groups and whether the list contains all available groups.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups
+# DEPRECATED
+# operationId: crashGroups_list
+@deprecated
+export def "v01-apps-crash-groups list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --last-occurrence-from: string # Earliest date when the last time a crash occured in a crash group (format: date-time)
+  --last-occurrence-to: string # Latest date when the last time a crash occured in a crash group (format: date-time)
+  --app-version: string # version
+  --group-type: string@group-type-completer
+  --group-status: string@group-status-completer
+  --group-text-search: string # A freetext search that matches in crash, crash types, crash stack_traces and crash user
+  --orderby: string@orderby-completer # the OData-like $orderby argument (default: last_occurrence desc, allows empty value)
+  --continuation-token: string # Cassandra request continuation token. The token is used for pagination.
+]: nothing -> record<continuation_token: string, crash_groups: table<annotation: string, app_version: string, build: string, count: int, crash_group_id: string, crash_reason: string, display_id: string, exception: string, fatal: bool, first_occurrence: string, impacted_users: int, last_occurrence: string, new_crash_group_id: string, reason_frame: record, status: string>, limited_result_set: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "last_occurrence_from" $last_occurrence_from "scalar") (serialize-qp "last_occurrence_to" $last_occurrence_to "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "group_type" $group_type "scalar") (serialize-qp "group_status" $group_status "scalar") (serialize-qp "group_text_search" $group_text_search "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "continuation_token" $continuation_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a specific group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}
+# DEPRECATED
+# operationId: crashGroups_get
+@deprecated
+export def "v01-apps-crash-groups get" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<annotation: string, app_version: string, build: string, count: int, crash_group_id: string, crash_reason: string, display_id: string, exception: string, fatal: bool, first_occurrence: string, impacted_users: int, last_occurrence: string, new_crash_group_id: string, reason_frame: record<app_code: bool, class_method: bool, class_name: string, code_formatted: string, code_raw: string, exception_type: string, file: string, framework_name: string, language: string, line: int, method: string, method_params: string, os_exception_type: string>, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a group.
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}
+# DEPRECATED
+# operationId: crashGroups_update
+@deprecated
+export def "v01-apps-crash-groups update" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --annotation: string
+  --status: any@status-completer-1
+]: any -> record<annotation: string, app_version: string, build: string, count: int, crash_group_id: string, crash_reason: string, display_id: string, exception: string, fatal: bool, first_occurrence: string, impacted_users: int, last_occurrence: string, new_crash_group_id: string, reason_frame: record<app_code: bool, class_method: bool, class_name: string, code_formatted: string, code_raw: string, exception_type: string, file: string, framework_name: string, language: string, line: int, method: string, method_params: string, os_exception_type: string>, status: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)")
+  let body = {annotation: $annotation, status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets all crashes of a group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes
+# DEPRECATED
+# operationId: crashes_list
+@deprecated
+export def "v01-apps-crash-groups-crashes list" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --include-report: oneof<nothing, bool> # true if the crash should include the raw crash report. Default is false (default: false)
+  --include-log: oneof<nothing, bool> # true if the crash should include the custom log report. Default is false (default: false)
+  --date-from: string # format: date-time
+  --date-to: string # format: date-time
+  --app-version: string # version
+  --error-type: string@error-type-completer
+]: nothing -> table<build: string, crash_id: string, details: record<app_start_timestamp: string, carrier_country: string, carrier_name: string, locale: string, os_build: string, rooted: bool, screen_size: string>, device: string, device_name: string, display_id: string, new_crash_group_id: string, new_crash_id: string, os_type: string, os_version: string, stacktrace: record<exception: record, reason: string, threads: list, title: string>, timestamp: string, user_email: string, user_name: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "include_report" $include_report "scalar") (serialize-qp "include_log" $include_log "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "error_type" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete a specific crash and related attachments and blobs for an app.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}
+# DEPRECATED
+# operationId: crashes_delete
+@deprecated
+export def "v01-apps-crash-groups-crashes delete" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --retention-delete: oneof<nothing, bool> # true in that case if the method should skip update counts (default: false)
+]: nothing -> record<app_id: string, attachments_deleted: int, blobs_failed: int, blobs_succeeded: int, crash_group_id: string, crash_id: string, crashes_deleted: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "retention_delete" $retention_delete "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a specific crash for an app.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}
+# DEPRECATED
+# operationId: crashes_get
+@deprecated
+export def "v01-apps-crash-groups-crashes get" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --include-report: oneof<nothing, bool> # true if the crash should include the raw crash report. Default is false (default: false)
+  --include-log: oneof<nothing, bool> # true if the crash should include the custom log report. Default is false (default: false)
+  --include-details: oneof<nothing, bool> # true if the crash should include in depth crash details (default: false)
+  --include-stacktrace: oneof<nothing, bool> # true if the crash should include the stacktrace information (default: false)
+  --grouping-only: oneof<nothing, bool> # true if the stacktrace should be only the relevant thread / exception. Default is false (default: false)
+]: nothing -> record<build: string, crash_id: string, details: record<app_start_timestamp: string, carrier_country: string, carrier_name: string, locale: string, os_build: string, rooted: bool, screen_size: string>, device: string, device_name: string, display_id: string, new_crash_group_id: string, new_crash_id: string, os_type: string, os_version: string, stacktrace: record<exception: record<frames: list, inner_exceptions: list, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: list<record>, title: string>, timestamp: string, user_email: string, user_name: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "include_report" $include_report "scalar") (serialize-qp "include_log" $include_log "scalar") (serialize-qp "include_details" $include_details "scalar") (serialize-qp "include_stacktrace" $include_stacktrace "scalar") (serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the native log of a specific crash.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/native
+# DEPRECATED
+# operationId: crashes_getNativeCrash
+@deprecated
+export def "v01-apps-crash-groups-crashes-native get" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/native")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the native log of a specific crash as a text attachment.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/native/download
+# DEPRECATED
+# operationId: crashes_getNativeCrashDownload
+@deprecated
+export def "v01-apps-crash-groups-crashes-native-download get" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/native/download")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the URI location to download json of a specific crash.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/raw/location
+# DEPRECATED
+# operationId: crashes_getRawCrashLocation
+@deprecated
+export def "v01-apps-crash-groups-crashes-raw-location get" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/raw/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a stacktrace for a specific crash.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/stacktrace
+# DEPRECATED
+# operationId: crashes_getStacktrace
+@deprecated
+export def "v01-apps-crash-groups-crashes-stacktrace get" [
+  crash_group_id: string
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --grouping-only: oneof<nothing, bool> # true if the stacktrace should be only the relevant thread / exception. Default is false (default: false)
+]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/stacktrace" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a stacktrace for a specific crash.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/stacktrace
+# DEPRECATED
+# operationId: crashGroups_getStacktrace
+@deprecated
+export def "v01-apps-crash-groups-stacktrace get" [
+  crash_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --grouping-only: oneof<nothing, bool> # true if the stacktrace should be only the relevant thread / exception. Default is false (default: false)
+]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/stacktrace" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets all attachments for a specific crash.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments
+# DEPRECATED
+# operationId: crashes_listAttachments
+@deprecated
+export def "v01-apps-crashes-attachments listAttachments" [
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<app_id: string, attachment_id: string, blob_location: string, content_type: string, crash_id: string, created_time: string, file_name: string, size: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the URI location to download crash attachment.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments/{attachment_id}/location
+# DEPRECATED
+# operationId: crashes_getCrashAttachmentLocation
+@deprecated
+export def "v01-apps-crashes-attachments-location get" [
+  crash_id: string
+  attachment_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments/($attachment_id)/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets content of the text attachment.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments/{attachment_id}/text
+# DEPRECATED
+# operationId: crashes_getCrashTextAttachmentContent
+@deprecated
+export def "v01-apps-crashes-attachments-text get" [
+  crash_id: string
+  attachment_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments/($attachment_id)/text")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get session logs by crash ID
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/session_logs
+# operationId: Crashes_ListSessionLogs
+export def "v01-apps-crashes-session-logs ListSessionLogs" [
+  crash_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --date: string # Date of data requested (format: date-time)
+]: nothing -> record<exceeded_max_limit: bool, last_received_log_timestamp: string, logs: table<account_id: string, auth_provider: string, device: record, event_id: string, event_name: string, install_id: string, message_id: string, properties: record, session_id: string, timestamp: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/session_logs" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets whether the application has any crashes.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/crashes_info
+# DEPRECATED
+# operationId: crashes_getAppCrashesInfo
+@deprecated
+export def "v01-apps-crashes-info get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<features: record<crash_download_raw: bool, crashgroup_analytics_crashfreeusers: bool, crashgroup_analytics_impactedusers: bool, crashgroup_modify_annotation: bool, crashgroup_modify_status: bool, search: bool>, has_crashes: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes_info")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a list of CodePush deployments for the given app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/deployments
+# operationId: codePushDeployments_list
+export def "v01-apps-deployments list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a CodePush Deployment for the given app
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/deployments
+# operationId: codePushDeployments_create
+export def "v01-apps-deployments create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --key: string
+  --latest-release: any
+  name: string
+]: any -> record<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments")
+  let body = {key: $key, latest_release: $latest_release, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a CodePush Deployment for the given app
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
+# operationId: codePushDeployments_delete
+export def "v01-apps-deployments delete" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets a CodePush Deployment for the given app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
+# operationId: codePushDeployments_get
+export def "v01-apps-deployments get" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Modifies a CodePush Deployment for the given app
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
+# operationId: codePushDeployments_update
+export def "v01-apps-deployments update" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  name: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
+  let body = {name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets all releases metrics for specified Deployment
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/metrics
+# operationId: codePushDeploymentMetrics_get
+export def "v01-apps-deployments-metrics get" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<active: int, downloaded: int, failed: int, installed: int, label: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/metrics")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Promote one release (default latest one) from one deployment to another
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/promote_release/{promote_deployment_name}
+# operationId: codePushDeployments_promote
+export def "v01-apps-deployments-promote-release promote" [
+  deployment_name: string
+  promote_deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string
+  --is-disabled: oneof<nothing, bool>
+  --is-mandatory: oneof<nothing, bool>
+  --rollout: int
+  --target-binary-range: string
+  --label: string
+]: any -> record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/promote_release/($promote_deployment_name)")
+  let body = {description: $description, is_disabled: $is_disabled, is_mandatory: $is_mandatory, rollout: $rollout, target_binary_range: $target_binary_range, label: $label} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Clears a Deployment of releases
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
+# operationId: codePushDeploymentReleases_delete
+export def "v01-apps-deployments-releases delete" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the history of releases on a Deployment
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
+# operationId: codePushDeploymentReleases_get
+export def "v01-apps-deployments-releases get" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a new CodePush release for the specified deployment
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
+# operationId: codePushDeploymentReleases_create
+# --release_upload shape: {id: string, token: string, upload_domain: string}
+export def "v01-apps-deployments-releases create" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-deployment-name: string # This specifies which deployment you want to release the update to. Default is Staging.
+  --description: string # This provides an optional "change log" for the deployment.
+  --disabled: oneof<nothing, bool> # This specifies whether an update should be downloadable by end users or not.
+  --mandatory: oneof<nothing, bool> # This specifies whether the update should be considered mandatory or not (e.g. it includes a critical security fix).
+  --no-duplicate-release-error: oneof<nothing, bool> # This specifies that if the update is identical to the latest release on the deployment, the CLI should generate a warning instead of an error.
+  release_upload: any # The upload metadata from the release initialization step. — shape: {id: string, token: string, upload_domain: string}
+  --rollout: int # This specifies the percentage of users (as an integer between 1 and 100) that should be eligible to receive this update.
+  target_binary_version: string # the binary version of the application
+]: any -> record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
+  let body = {deployment_name: $body_deployment_name, description: $description, disabled: $disabled, mandatory: $mandatory, no_duplicate_release_error: $no_duplicate_release_error, release_upload: $release_upload, rollout: $rollout, target_binary_version: $target_binary_version} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies a CodePush release metadata under the given Deployment
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases/{release_label}
+# operationId: deploymentReleases_update
+export def "v01-apps-deployments-releases update" [
+  deployment_name: string
+  release_label: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string
+  --is-disabled: oneof<nothing, bool>
+  --is-mandatory: oneof<nothing, bool>
+  --rollout: int
+  --target-binary-range: string
+]: any -> record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases/($release_label)")
+  let body = {description: $description, is_disabled: $is_disabled, is_mandatory: $is_mandatory, rollout: $rollout, target_binary_range: $target_binary_range} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Rollback the latest or a specific release for an app deployment
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/rollback_release
+# operationId: codePushDeploymentRelease_rollback
+export def "v01-apps-deployments-rollback-release rollback" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --label: string
+]: any -> record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/rollback_release")
+  let body = {label: $label} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Create a new CodePush release upload for the specified deployment
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/uploads
+# operationId: codePushDeploymentUpload_create
+export def "v01-apps-deployments-uploads create" [
+  deployment_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, token: string, upload_domain: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/uploads")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of available devices
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/device_configurations
+# operationId: test_getDeviceConfigurations
+export def "v01-apps-device-configurations get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-upload-id: string # The ID of the test run (format: uuid)
+]: nothing -> table<id: string, image: record<full: string, thumb: string>, marketShare: float, model: record<availabilityCount: float, cpu: record, deviceFrame: record, dimensions: record, formFactor: string, manufacturer: string, memory: record, model: string, name: string, platform: string, releaseDate: string, resolution: record, screenRotation: float, screenSize: record>, name: string, os: string, osName: string, tier: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "app_upload_id" $app_upload_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/device_configurations" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a short ID for a list of devices
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/device_selection
+# operationId: test_createDeviceSelection
+export def "v01-apps-device-selection createDeviceSelection" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  devices: list
+]: any -> record<shortId: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/device_selection")
+  let body = {devices: $devices} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# **Warning, this operation is not reversible.**   A successful call to this API will permanently stop ingesting any logs received via SDK by app_id, and cannot be restored. We advise caution when using this API, it is designed to permanently disable an app_id.
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs
+# operationId: App_BlockLogs
+export def "v01-apps-devices-block-logs BlockLogs-by-owner_name-app_name" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/devices/block_logs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# **Warning, this operation is not reversible.**   A successful call to this API will permanently stop ingesting any logs received via SDK for the given installation ID, and cannot be restored. We advise caution when using this API, it is designed to permanently disable collection from a specific installation of the app on a device, usually following the request from a user.
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs/{install_id}
+# operationId: Devices_BlockLogs
+export def "v01-apps-devices-block-logs BlockLogs-by-install_id-owner_name-app_name" [
+  install_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/devices/block_logs/($install_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets top N (ordered by crash count) of crash groups by missing symbol
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups
+# operationId: missingSymbolGroups_list
+export def "v01-apps-diagnostics-symbol-groups list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --top: int # top N elements
+]: nothing -> record<groups: table<app_build: string, app_id: string, app_ver: string, crash_count: int, error_count: int, last_modified: string, missing_symbols: list, status: string, symbol_group_id: string>, total_crash_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets missing symbol crash group by its id
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups/{symbol_group_id}
+# operationId: missingSymbolGroups_get
+export def "v01-apps-diagnostics-symbol-groups get" [
+  symbol_group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<groups: table<app_build: string, app_id: string, app_ver: string, crash_count: int, error_count: int, last_modified: string, missing_symbols: list, status: string, symbol_group_id: string>, total_crash_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups/($symbol_group_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets application level statistics for all missing symbol groups
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups_info
+# operationId: missingSymbolGroups_info
+export def "v01-apps-diagnostics-symbol-groups-info info" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<total_crash_count: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups_info")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of distribution groups in the app specified
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups
+# operationId: distributionGroups_list
+export def "v01-apps-distribution-groups list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new distribution group and returns it to the caller
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups
+# operationId: distributionGroups_create
+export def "v01-apps-distribution-groups create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --display-name: string # The display name of the distribution group. If not specified, the name will be used.
+  name: string # The name of the distribution group
+]: any -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups")
+  let body = {display_name: $display_name, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a distribution group
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_delete
+export def "v01-apps-distribution-groups delete" [
+  app_name: string
+  owner_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a single distribution group for a given distribution group name
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_get
+export def "v01-apps-distribution-groups get" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the attributes of distribution group
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_update
+export def "v01-apps-distribution-groups update" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --is-public: oneof<nothing, bool> # Whether the distribution group is public
+  --name: string # The name of the distribution group
+]: any -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
+  let body = {is_public: $is_public, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns all devices associated with the given distribution group
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices
+# operationId: devices_list
+export def "v01-apps-distribution-groups-devices list" [
+  distribution_group_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --release-id: float # when provided, gets the provisioning state of the devices owned by users of this distribution group when compared to the provided release.
+]: nothing -> table<device_name: string, full_device_name: string, imei: string, model: string, os_build: string, os_version: string, owner_id: string, registered_at: string, serial: string, status: string, udid: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "release_id" $release_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/devices" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns all devices associated with the given distribution group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices/download_devices_list
+# operationId: devices_listCsvFormat
+export def "v01-apps-distribution-groups-devices-download-devices-list listCsvFormat" [
+  distribution_group_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unprovisioned-only: oneof<nothing, bool> # when true, filters out provisioned devices (default: false)
+  --udids: list # multiple UDIDs which should be part of the resulting CSV.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "unprovisioned_only" $unprovisioned_only "scalar") (serialize-qp "udids" $udids "csv")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/devices/download_devices_list" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of member details in the distribution group specified
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
+# operationId: distributionGroups_listUsers
+export def "v01-apps-distribution-groups-members listUsers" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --exclude-pending-invitations: oneof<nothing, bool> # Whether to exclude pending invitations in the response
+]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, invite_pending: bool, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "exclude_pending_invitations" $exclude_pending_invitations "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds the members to the specified distribution group
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
+# operationId: distributionGroups_addUser
+export def "v01-apps-distribution-groups-members addUser" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> table<code: string, invite_pending: bool, message: string, status: int, user_email: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove the users from the distribution group
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members/bulk_delete
+# operationId: distributionGroups_removeUser
+export def "v01-apps-distribution-groups-members-bulk-delete removeUser" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> table<code: string, message: int, status: int, user_email: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members/bulk_delete")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Return basic information about distributed releases in a given distribution group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases
+# operationId: releases_listByDistributionGroup
+export def "v01-apps-distribution-groups-releases listByDistributionGroup" [
+  distribution_group_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<enabled: bool, id: int, is_external_build: bool, mandatory_update: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a release with id 'release_id' in a given distribution group.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
+# operationId: releases_deleteWithDistributionGroupId
+export def "v01-apps-distribution-groups-releases delete" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  release_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases/($release_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return detailed information about a distributed release in a given distribution group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
+# operationId: releases_getLatestByDistributionGroup
+export def "v01-apps-distribution-groups-releases get" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  release_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases/($release_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Resend distribution group app invite notification to previously invited testers
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/resend_invite
+# operationId: distributionGroups_resendInvite
+export def "v01-apps-distribution-groups-resend-invite resendInvite" [
+  owner_name: string
+  app_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/resend_invite")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get all the store details from Storage store table for a particular application.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores
+# operationId: stores_list
+export def "v01-apps-distribution-stores list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<created_by: string, created_by_principal_type: string, id: string, intune_details: record<app_category: record, target_audience: record>, name: string, service_connection_id: string, track: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a new external store for the specified application.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/distribution_stores
+# operationId: stores_create
+# --intune_details shape: {app_category?: any, secret_json?: any, target_audience?: any, tenant_id?: string}
+export def "v01-apps-distribution-stores create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --intune-details: any # shape: {app_category?: any, secret_json?: any, target_audience?: any, tenant_id?: string}
+  --name: string # name of the store. In case of googleplay, and Apple store this is fixed to Production.
+  --service-connection-id: string # Id for the shared service connection. In case of Apple AppStore, this connection will be used to create and connect to the Apple AppStore in Mobile Center.
+  --track: string@track-completer # track of the store. Can be production, alpha & beta for googleplay. Can be production, testflight-internal & testflight-external for Apple Store.
+  --type: string@type-completer # store Type
+]: any -> record<created_by: string, created_by_principal_type: string, id: string, intune_details: record<app_category: record<id: string, name: string>, target_audience: record<id: string, name: string>>, name: string, service_connection_id: string, track: string, type: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores")
+  let body = {intune_details: $intune_details, name: $name, service_connection_id: $service_connection_id, track: $track, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# delete the store based on specific store name.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
+# operationId: stores_delete
+export def "v01-apps-distribution-stores delete" [
+  store_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Return the store details for specified store name.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
+# operationId: stores_get
+export def "v01-apps-distribution-stores get" [
+  store_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<created_by: string, created_by_principal_type: string, id: string, intune_details: record<app_category: record<id: string, name: string>, target_audience: record<id: string, name: string>>, name: string, service_connection_id: string, track: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update the store.
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
+# operationId: stores_patch
+export def "v01-apps-distribution-stores patch" [
+  store_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  service_connection_id: string # Service connection id to updated.
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
+  let body = {service_connection_id: $service_connection_id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the latest release published in a store.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/latest_release
+# operationId: storeReleases_getLatest
+export def "v01-apps-distribution-stores-latest-release get" [
+  store_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<android_min_api_level: string, app_display_name: string, app_name: string, bundle_identifier: string, distribution_stores: list<record>, download_url: string, fingerprint: string, id: float, install_url: string, min_os: string, release_notes: string, short_version: string, size: float, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/latest_release")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return all releases published  in a store
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases
+# operationId: storeReleases_list
+export def "v01-apps-distribution-stores-releases list" [
+  store_name: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<destination_type: string, distribution_stores: list<record>, id: float, short_version: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# delete the release with release Id
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
+# operationId: storeReleases_delete
+export def "v01-apps-distribution-stores-releases delete" [
+  store_name: string
+  release_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Return releases published in a store for releaseId and storeId
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
+# operationId: storeReleases_get
+export def "v01-apps-distribution-stores-releases get" [
+  store_name: string
+  release_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<android_min_api_level: string, app_display_name: string, app_name: string, bundle_identifier: string, distribution_stores: list<record>, download_url: string, fingerprint: string, id: float, install_url: string, min_os: string, release_notes: string, short_version: string, size: float, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return the Error Details of release which failed in publishing.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_error_details
+# operationId: storeReleases_getPublishError
+export def "v01-apps-distribution-stores-releases-publish-error-details get" [
+  store_name: string
+  release_id: float
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<is_log_available: bool, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/publish_error_details")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns publish logs for a particular release published to a particular store
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_logs
+# operationId: storeReleasePublishLogs_get
+export def "v01-apps-distribution-stores-releases-publish-logs get" [
+  store_name: string
+  release_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/publish_logs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return the Real time Status publishing of release from store.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/realtimestatus
+# operationId: storeReleases_getRealTimeStatusByReleaseId
+export def "v01-apps-distribution-stores-releases-realtimestatus get" [
+  store_name: string
+  release_id: float
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_id: string, release_id: string, status: record<status: string, storetype: string, track: string, version: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/realtimestatus")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List of app builds
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/availableAppBuilds
+# operationId: Errors_AppBuildsList
+export def "v01-apps-errors-available-app-builds AppBuildsList" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+]: nothing -> record<appBuilds: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/availableAppBuilds" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all available versions in the time range.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/available_versions
+# operationId: Errors_AvailableVersions
+export def "v01-apps-errors-available-versions AvailableVersions" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+  --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
+  --filter: string # A filter as specified in https://github.com/Microsoft/api-guidelines/blob/master/Guidelines.md#97-filtering. (format: string)
+  --inlinecount: string@inlinecount-completer # Controls whether or not to include a count of all the items across all pages. (default: none)
+  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+]: nothing -> record<total_count: int, versions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/available_versions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Count of crashes or errors by day in the time range based the selected versions. If SingleErrorTypeParameter is not provided, defaults to handlederror.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorCountsPerDay
+# operationId: Errors_CountsPerDay
+export def "v01-apps-errors-error-counts-per-day CountsPerDay" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --app-build: string # app build (format: string)
+  --errorType: string@errorType-completer-1 # Type of error (handled vs unhandled), excluding All
+]: nothing -> record<count: int, errors: table<count: int, datetime: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorCountsPerDay" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List of error groups
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups
+# operationId: Errors_GroupList
+export def "v01-apps-errors-error-groups GroupList" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --app-build: string # app build (format: string)
+  --groupState: string # format: string
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --orderby: string # controls the sorting order and sorting based on which column (default: count desc)
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+]: nothing -> record<errorGroups: list<record>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "groupState" $groupState "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error groups list based on search parameters
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/search
+# operationId: Errors_ErrorGroupsSearch
+export def "v01-apps-errors-error-groups-search ErrorGroupsSearch" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # A filter as specified in OData notation (format: string)
+  --q: string # A query string (format: string)
+  --order: string@order-completer # It controls the order of sorting (default: desc)
+  --qp-sort: string@sort-completer # It controls the sort based on specified field (default: matchingReportsCount)
+  --top: int # The maximum number of results to return (format: int64, default: 100)
+  --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
+]: nothing -> record<errorGroups: list<record>, hasMoreResults: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/search" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error group details
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
+# operationId: Errors_GroupDetails
+export def "v01-apps-errors-error-groups GroupDetails" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update error group state
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
+# operationId: Errors_UpdateState
+export def "v01-apps-errors-error-groups UpdateState" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --annotation: string
+  state: string@state-completer
+]: any -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)")
+  let body = {annotation: $annotation, state: $state} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Count of errors by day in the time range of the selected error group with selected version
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorCountsPerDay
+# operationId: Errors_GroupCountsPerDay
+export def "v01-apps-errors-error-groups-error-counts-per-day GroupCountsPerDay" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --version: string # format: string
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+]: nothing -> record<count: int, errors: table<count: int, datetime: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errorCountsPerDay" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Percentage of error-free devices by day in the time range. Api will return -1 if crash devices is greater than active devices
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorfreeDevicePercentages
+# operationId: Errors_GroupErrorFreeDevicePercentages
+export def "v01-apps-errors-error-groups-errorfree-device-percentages GroupErrorFreeDevicePercentages" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+]: nothing -> record<averagePercentage: float, dailyPercentages: table<datetime: string, percentage: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errorfreeDevicePercentages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all errors for group
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors
+# operationId: Errors_ListForGroup
+export def "v01-apps-errors-error-groups-errors ListForGroup" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+  --model: string # format: string
+  --os: string # format: string
+]: nothing -> record<errors: table<country: string, deviceName: string, errorId: string, hasAttachments: bool, hasBreadcrumbs: bool, language: string, osType: string, osVersion: string, timestamp: string, userId: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "os" $os "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Latest error details.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/latest
+# operationId: Errors_LatestErrorDetails
+export def "v01-apps-errors-error-groups-errors-latest LatestErrorDetails" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/latest")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete a specific error and related attachments and blobs for an app. Searchable data will not be deleted immediately and may take up to 30 days.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
+# operationId: Errors_DeleteError
+export def "v01-apps-errors-error-groups-errors DeleteError" [
+  errorGroupId: string
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appId: string, attachmentsDeleted: int, blobsFailed: int, blobsSucceeded: int, errorGroupId: string, errorId: string, errorsDeleted: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error details.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
+# operationId: Errors_GetErrorDetails
+export def "v01-apps-errors-error-groups-errors GetErrorDetails" [
+  errorGroupId: string
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Download details for a specific error.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/download
+# operationId: Errors_ErrorDownload
+export def "v01-apps-errors-error-groups-errors-download ErrorDownload" [
+  errorGroupId: string
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --format: string@format-completer-1 # the format of the crash log
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/download" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error location.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/location
+# operationId: Errors_ErrorLocation
+export def "v01-apps-errors-error-groups-errors-location ErrorLocation" [
+  errorGroupId: string
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error Stacktrace details.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/stacktrace
+# operationId: Errors_ErrorStackTrace
+export def "v01-apps-errors-error-groups-errors-stacktrace ErrorStackTrace" [
+  errorGroupId: string
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/stacktrace")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Top models of the selected error group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/models
+# operationId: Errors_GroupModelCounts
+export def "v01-apps-errors-error-groups-models GroupModelCounts" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+]: nothing -> record<errorCount: int, models: table<errorCount: int, modelCode: string, modelName: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/models" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Top OSes of the selected error group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/operatingSystems
+# operationId: Errors_GroupOperatingSystemCounts
+export def "v01-apps-errors-error-groups-operating-systems GroupOperatingSystemCounts" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
+]: nothing -> record<errorCount: int, operatingSystems: table<errorCount: int, operatingSystemName: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/operatingSystems" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the stack trace for the error group.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/stacktrace
+# operationId: Errors_GroupErrorStackTrace
+export def "v01-apps-errors-error-groups-stacktrace GroupErrorStackTrace" [
+  errorGroupId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/stacktrace")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Percentage of error-free devices by day in the time range based on the selected versions. If SingleErrorTypeParameter is not provided, defaults to handlederror. API will return -1 if crash devices is greater than active devices
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/errorfreeDevicePercentages
+# operationId: Errors_ErrorFreeDevicePercentages
+export def "v01-apps-errors-errorfree-device-percentages ErrorFreeDevicePercentages" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
+  --versions: list
+  --app-build: string # app build (format: string)
+  --errorType: string@errorType-completer-1 # Type of error (handled vs unhandled), excluding All
+]: nothing -> record<averagePercentage: float, dailyPercentages: table<datetime: string, percentage: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorfreeDevicePercentages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# gets the retention settings in days
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/retention_settings
+# operationId: errors_getRetentionSettings
+export def "v01-apps-errors-retention-settings get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<retention_in_days: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/retention_settings")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Errors list based on search parameters
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/search
+# operationId: Errors_ErrorSearch
+export def "v01-apps-errors-search ErrorSearch" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # A filter as specified in OData notation (format: string)
+  --q: string # A query string (format: string)
+  --order: string@order-completer # It controls the order of sorting (default: desc)
+  --qp-sort: string@sort-completer-1 # It controls the sort based on specified field (default: timestamp)
+  --top: int # The maximum number of results to return (format: int64, default: 100)
+  --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
+]: nothing -> record<errors: table<country: string, deviceName: string, errorId: string, hasAttachments: bool, hasBreadcrumbs: bool, language: string, osType: string, osVersion: string, timestamp: string, userId: string>, hasMoreResults: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/search" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List error attachments.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments
+# operationId: Errors_ErrorAttachments
+export def "v01-apps-errors-attachments ErrorAttachments" [
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<appId: string, attachmentId: string, blobLocation: string, contentType: string, crashId: string, createdTime: string, fileName: string, size: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error attachment location.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/location
+# operationId: Errors_ErrorAttachmentLocation
+export def "v01-apps-errors-attachments-location ErrorAttachmentLocation" [
+  errorId: string
+  attachmentId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments/($attachmentId)/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Error attachment text.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/text
+# operationId: Errors_ErrorAttachmentText
+export def "v01-apps-errors-attachments-text ErrorAttachmentText" [
+  errorId: string
+  attachmentId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<content: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments/($attachmentId)/text")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get session logs by error ID
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/sessionLogs
+# operationId: Errors_ListSessionLogs
+export def "v01-apps-errors-session-logs ListSessionLogs" [
+  errorId: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --date: string # Date of data requested (format: date-time)
+]: nothing -> record<exceeded_max_limit: bool, last_received_log_timestamp: string, logs: table<device: record, event_id: string, event_name: string, install_id: string, message_id: string, properties: record, session_id: string, timestamp: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/sessionLogs" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List export configurations.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/export_configurations
+# operationId: ExportConfigurations_List
+export def "v01-apps-export-configurations List" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<nextLink: string, total: int, values: table<creation_time: string, export_configuration: record, export_entities: list, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create new export configuration
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/export_configurations
+# Discriminator (request): type
+# operationId: ExportConfigurations_Create
+export def "v01-apps-export-configurations Create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --backfill: oneof<nothing, bool> # Field to determine if backfilling should occur. The default value is true. If set to false export starts from date and time of config creation.
+  --export-entities: list
+  --resource-group: string # The resource group name on azure
+  --resource-name: string # The resource name on azure
+  type: string@type-completer-1 # Type of export configuration
+]: any -> record<creation_time: string, export_configuration: record<backfill: bool, export_entities: list<string>, resource_group: string, resource_name: string, type: string>, export_entities: list<string>, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations")
+  let body = {backfill: $backfill, export_entities: $export_entities, resource_group: $resource_group, resource_name: $resource_name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete export configuration.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
+# operationId: ExportConfigurations_Delete
+export def "v01-apps-export-configurations Delete" [
+  export_configuration_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get export configuration.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
+# operationId: ExportConfigurations_Get
+export def "v01-apps-export-configurations Get" [
+  export_configuration_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<creation_time: string, export_configuration: record<backfill: bool, export_entities: list<string>, resource_group: string, resource_name: string, type: string>, export_entities: list<string>, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Partially update export configuration.
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
+# Discriminator (request): type
+# operationId: ExportConfigurations_PartialUpdate
+export def "v01-apps-export-configurations PartialUpdate" [
+  export_configuration_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --backfill: oneof<nothing, bool> # Field to determine if backfilling should occur. The default value is true. If set to false export starts from date and time of config creation.
+  --export-entities: list
+  --resource-group: string # The resource group name on azure
+  --resource-name: string # The resource name on azure
+  type: string@type-completer-1 # Type of export configuration
+]: any -> record<creation_time: string, export_configuration: record<backfill: bool, export_entities: list<string>, resource_group: string, resource_name: string, type: string>, export_entities: list<string>, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
+  let body = {backfill: $backfill, export_entities: $export_entities, resource_group: $resource_group, resource_name: $resource_name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Disable export configuration.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/disable
+# operationId: ExportConfigurations_Disable
+export def "v01-apps-export-configurations-disable Disable" [
+  export_configuration_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)/disable")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Enable export configuration.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/enable
+# operationId: ExportConfigurations_Enable
+export def "v01-apps-export-configurations-enable Enable" [
+  export_configuration_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)/enable")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a new asset to upload a file
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/file_asset
+# operationId: fileAssets_create
+export def "v01-apps-file-asset create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<id: string, location: string, token: string, uploadDomain: string, uploadWindowLocation: string, urlEncodedToken: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/file_asset")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the pending invitations for the app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/invitations
+# operationId: appInvitations_list
+export def "v01-apps-invitations list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app: record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string>, app_count: float, distribution_group: record<owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>>, email: string, id: string, invite_type: string, invited_by: record<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>>, is_existing_user: bool, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Invites a new or existing user to an app
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/invitations
+# operationId: appInvitations_create
+export def "v01-apps-invitations create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The user's role
+  user_email: string # The user's email address
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations")
+  let body = {role: $role, user_email: $user_email} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes a user's invitation to an app
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
+# operationId: appInvitations_delete
+export def "v01-apps-invitations delete" [
+  owner_name: string
+  app_name: string
+  user_email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update pending invitation permission
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
+# operationId: appInvitations_updatePermissions
+export def "v01-apps-invitations updatePermissions" [
+  owner_name: string
+  app_name: string
+  user_email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  permissions: list # The permissions the user has for the app in the invitation
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
+  let body = {permissions: $permissions} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Invites a new or existing user to an app
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
+# DEPRECATED
+# operationId: appInvitations_createByEmail
+@deprecated
+export def "v01-apps-invitations createByEmail" [
+  owner_name: string
+  app_name: string
+  user_email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The role of the user to be added
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
+  let body = {role: $role} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get Email notification settings of user for a particular app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/notifications/emailSettings
+# operationId: notifications_getAppEmailSettings
+export def "v01-apps-notifications-email-settings get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/notifications/emailSettings")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists device sets belonging to the owner
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
+# operationId: test_listDeviceSetsOfOwner
+export def "v01-apps-owner-device-sets listDeviceSetsOfOwner" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<deviceConfigurations: list<record>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a device set belonging to the owner
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
+# operationId: test_createDeviceSetOfOwner
+export def "v01-apps-owner-device-sets createDeviceSetOfOwner" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  devices: list # List of device IDs
+  name: string # The name of the device set
+]: any -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets")
+  let body = {devices: $devices, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a device set belonging to the owner
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
+# operationId: test_deleteDeviceSetOfOwner
+export def "v01-apps-owner-device-sets delete" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a device set belonging to the owner
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
+# operationId: test_getDeviceSetOfOwner
+export def "v01-apps-owner-device-sets get" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a device set belonging to the owner
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
+# operationId: test_updateDeviceSetOfOwner
+export def "v01-apps-owner-device-sets updateDeviceSetOfOwner" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  devices: list # List of device IDs
+  name: string # The name of the device set
+]: any -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
+  let body = {devices: $devices, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get the latest release from every distribution group associated with an application.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/recent_releases
+# operationId: releases_listLatest
+export def "v01-apps-recent-releases listLatest" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<build: record<branch_name: string, commit_hash: string, commit_message: string>, destination_type: string, destinations: list<record>, distribution_groups: list<record>, distribution_stores: list<record>, enabled: bool, file_extension: string, id: int, is_external_build: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/recent_releases")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return basic information about releases.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/releases
+# operationId: releases_list
+export def "v01-apps-releases list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --published-only: oneof<nothing, bool> # When *true*, filters out releases that were uploaded but were never distributed. Releases that under deleted distribution groups will not be filtered out.
+  --scope: string # When the scope is 'tester', only includes releases that have been distributed to groups that the user belongs to.
+  --top: float # The number of releases to return
+  --releaseId: float # The id of a release
+]: nothing -> table<build: record<branch_name: string, commit_hash: string, commit_message: string>, destination_type: string, destinations: list<record>, distribution_groups: list<record>, distribution_stores: list<record>, enabled: bool, file_extension: string, id: int, is_external_build: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "published_only" $published_only "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "releaseId" $releaseId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return detailed information about releases avaiable to a tester.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/releases/filter_by_tester
+# DEPRECATED
+# operationId: releases_availableToTester
+@deprecated
+export def "v01-apps-releases-filter-by-tester availableToTester" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --published-only: oneof<nothing, bool> # when *true*, filters out releases that were uploaded but were never distributed. Releases that under deleted distribution groups will not be filtered out.
+]: nothing -> table<build: record<branch_name: string, commit_hash: string, commit_message: string>, destination_type: string, destinations: list<record>, distribution_groups: list<record>, distribution_stores: list<record>, enabled: bool, file_extension: string, id: int, is_external_build: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "published_only" $published_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/filter_by_tester" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a release.
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
+# operationId: releases_delete
+export def "v01-apps-releases delete" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a release with id `release_id`. If `release_id` is `latest`, return the latest release that was distributed to the current user (from all the distribution groups).
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
+# operationId: releases_getLatestByUser
+export def "v01-apps-releases get" [
+  release_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --udid: string # when supplied, this call will also check if the given UDID is provisioned. Will be ignored for non-iOS platforms. The value will be returned in the property is_udid_provisioned.
+  --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "udid" $udid "scalar") (serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a release.
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
+# operationId: releases_update
+export def "v01-apps-releases update" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<release_notes: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+}
+
+# Update details of a release.
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
+# operationId: releases_updateDetails
+# --build shape: {branch_name?: string, commit_hash?: string, commit_message?: string}
+export def "v01-apps-releases updateDetails" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --build: record # Contains metadata about the build that produced the release being uploaded — shape: {branch_name?: string, commit_hash?: string, commit_message?: string}
+  --enabled: oneof<nothing, bool> # Toggle this release to be enable distribute/download or not.
+  --release-notes: string # Release notes for this release.
+]: any -> record<destinations: table<id: string, name: string>, enabled: bool, mandatory_update: bool, provisioning_status_url: string, release_notes: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
+  let body = {build: $build, enabled: $enabled, release_notes: $release_notes} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Distributes a release to a group
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups
+# operationId: releases_addDistributionGroup
+export def "v01-apps-releases-groups addDistributionGroup" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  id: string # Unique id of the release destination (format: uuid)
+  --mandatory-update: oneof<nothing, bool> # Flag to mark the release for the provided destinations as mandatory
+  --notify-testers: oneof<nothing, bool> # Flag to enable or disable notifications to testers (default: true)
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups")
+  let body = {id: $id, mandatory_update: $mandatory_update, notify_testers: $notify_testers} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the given distribution group from the release
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
+# operationId: releases_deleteDistributionGroup
+export def "v01-apps-releases-groups delete" [
+  release_id: int
+  group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups/($group_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update details about the specified distribution group associated with the release
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
+# operationId: releases_putDistributionGroup
+export def "v01-apps-releases-groups put" [
+  release_id: int
+  group_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --mandatory-update: oneof<nothing, bool> # Whether a release is mandatory for the given destination
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups/($group_id)")
+  let body = {mandatory_update: $mandatory_update} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Return information about the provisioning profile. Only available for iOS.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/provisioning_profile
+# operationId: provisioning_profile
+export def "v01-apps-releases-provisioning-profile profile" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appex_profiles: list<any>, provisioning_bundle_id: string, provisioning_profile_name: string, provisioning_profile_type: string, team_identifier: string, udids: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/provisioning_profile")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Distributes a release to a store
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores
+# operationId: releases_addStore
+export def "v01-apps-releases-stores addStore" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  id: string # Unique id of the release destination (format: uuid)
+]: any -> record<id: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/stores")
+  let body = {id: $id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the given distribution store from the release
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores/{store_id}
+# operationId: releases_deleteDistributionStore
+export def "v01-apps-releases-stores delete" [
+  release_id: int
+  store_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/stores/($store_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Distributes a release to a user
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers
+# operationId: releases_addTesters
+export def "v01-apps-releases-testers addTesters" [
+  release_id: int
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  email: string # Tester's email address
+  --mandatory-update: oneof<nothing, bool> # Flag to mark the release for the provided destinations as mandatory
+  --notify-testers: oneof<nothing, bool> # Flag to enable or disable notifications to testers (default: true)
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers")
+  let body = {email: $email, mandatory_update: $mandatory_update, notify_testers: $notify_testers} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete the given tester from the release
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
+# operationId: releases_deleteDistributionTester
+export def "v01-apps-releases-testers delete" [
+  release_id: int
+  tester_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers/($tester_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update details about the specified tester associated with the release
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
+# operationId: releases_putDistributionTester
+export def "v01-apps-releases-testers put" [
+  release_id: int
+  tester_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --mandatory-update: oneof<nothing, bool> # Whether a release is mandatory for the given destination
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers/($tester_id)")
+  let body = {mandatory_update: $mandatory_update} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the resign status to the caller
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/update_devices/{resign_id}
+# operationId: devices_getReleaseUpdateDevicesStatus
+export def "v01-apps-releases-update-devices get" [
+  release_id: string
+  resign_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --include-provisioning-profile: oneof<nothing, bool> # A boolean value that indicates if the provisioning profile should be return in addition to the status. When set to true, the provisioning profile will be returned only when status is 'complete' or 'preparing_for_testers'.
+]: nothing -> record<error_code: string, error_message: string, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "include_provisioning_profile" $include_provisioning_profile "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/update_devices/($resign_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Removes the configuration for the repository
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/repo_config
+# operationId: repositoryConfigurations_delete
+export def "v01-apps-repo-config delete" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the repository build configuration status of the app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/repo_config
+# operationId: repositoryConfigurations_list
+export def "v01-apps-repo-config list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --includeInactive: oneof<nothing, bool> # Include inactive configurations if none are active
+]: nothing -> table<id: string, state: string, type: string, user_email: string, installation_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "includeInactive" $includeInactive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Configures the repository for build
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/repo_config
+# operationId: repositoryConfigurations_createOrUpdate
+export def "v01-apps-repo-config createOrUpdate" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --installation-id: string # The GitHub App Installation id. Required for repositories connected from GitHub App
+  --external-user-id: string # The external user id from the repository provider. Required for GitLab.com repositories
+  --repo-id: string # The repository id from the repository provider. Required for repositories connected from GitHub App and GitLab.com
+  repo_url: string # The repository's git url, must be a HTTPS URL (e.g. https://github.com/foo/bar.git)
+  --service-connection-id: string # The id of the service connection (private). Required for GitLab self-hosted repositories
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config")
+  let body = {installation_id: $installation_id, external_user_id: $external_user_id, repo_id: $repo_id, repo_url: $repo_url, service_connection_id: $service_connection_id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the repositories available from the source code host
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/source_hosts/{source_host}/repositories
+# operationId: repositories_list
+export def "v01-apps-source-hosts-repositories list" [
+  source_host: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --vstsAccountName: string # Filter repositories only for specified account and project, "vstsProjectId" is required
+  --vstsProjectId: string # Filter repositories only for specified account and project, "vstsAccountName" is required
+  --service-connection-id: string # The id of the service connection (private). Required for GitLab self-hosted repositories
+  --form: string@form-completer # The selected form of the object
+]: nothing -> table<clone_url: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "vstsAccountName" $vstsAccountName "scalar") (serialize-qp "vstsProjectId" $vstsProjectId "scalar") (serialize-qp "service_connection_id" $service_connection_id "scalar") (serialize-qp "form" $form "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/source_hosts/($source_host)/repositories" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Application specific store service status
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/store_service_status
+# operationId: storeNotifications_getNotificationByAppId
+export def "v01-apps-store-service-status get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<service: string, status: string, valid_until: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/store_service_status")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get information about the currently active subscriptions, if any
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/subscriptions
+# operationId: test_getSubscriptions
+export def "v01-apps-subscriptions get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<active: bool, concurrentDevicesLimit: int, daysLeft: float, endsAt: string, id: string, runningDevices: int, startsAt: string, tier: record<name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/subscriptions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Accept a free trial subscription
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/subscriptions
+# operationId: test_createSubscription
+export def "v01-apps-subscriptions createSubscription" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<active: bool, concurrentDevicesLimit: int, daysLeft: float, endsAt: string, id: string, runningDevices: int, startsAt: string, tier: record<name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/subscriptions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a list of all uploads for the specified application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads
+# operationId: symbolUploads_list
+export def "v01-apps-symbol-uploads list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --top: int # The maximum number of results to return. (format: int64, default: 30)
+  --status: string@status-completer-2 # Filter results by the current status of a symbol upload: * all: all states in the symbol upload process. Includes created, aborted, committed, processing, indexed and failed states * uploaded: all states after package is uploaded. Includes committed, processing, indexed and failed states * processed: symbol upload processing is completed. Includes indexed and failed states.
+  --symbol-type: string@symbol-type-completer # The type of symbols
+]: nothing -> table<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: list<record>, timestamp: string, user: record<display_name: string, email: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "symbol_type" $symbol_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Begins the symbol upload process for a new set of symbols for the specified application
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/symbol_uploads
+# operationId: symbolUploads_create
+export def "v01-apps-symbol-uploads create" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --build: string # The build number. Optional for Apple. Required for Android.
+  --client-callback: string # The callback URL that the client can optionally provide to get status updates for the current symbol upload
+  --file-name: string # The file name for the symbol upload
+  symbol_type: string@symbol-type-completer # The type of the symbol for the current symbol upload
+  --version: string # The version number. Optional for Apple. Required for Android.
+]: any -> record<expiration_date: string, symbol_upload_id: string, upload_url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads")
+  let body = {build: $build, client_callback: $client_callback, file_name: $file_name, symbol_type: $symbol_type, version: $version} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a symbol upload by id for the specified application
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
+# operationId: symbolUploads_delete
+export def "v01-apps-symbol-uploads delete" [
+  symbol_upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: table<platform: string, symbol_id: string>, timestamp: string, user: record<display_name: string, email: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a symbol upload by id for the specified application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
+# operationId: symbolUploads_get
+export def "v01-apps-symbol-uploads get" [
+  symbol_upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: table<platform: string, symbol_id: string>, timestamp: string, user: record<display_name: string, email: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Commits or aborts the symbol upload process for a new set of symbols for the specified application
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
+# operationId: symbolUploads_complete
+export def "v01-apps-symbol-uploads complete" [
+  symbol_upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  status: string@status-completer-3 # The desired operation for the symbol upload
+]: any -> record<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: table<platform: string, symbol_id: string>, timestamp: string, user: record<display_name: string, email: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
+  let body = {status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the URL to download the symbol upload
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}/location
+# operationId: symbolUploads_getLocation
+export def "v01-apps-symbol-uploads-location get" [
+  symbol_upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the list of all symbols for the provided application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbols
+# operationId: symbols_list
+export def "v01-apps-symbols list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a particular symbol by id (uuid) for the provided application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}
+# operationId: symbols_get
+export def "v01-apps-symbols get" [
+  symbol_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Marks a symbol by id (uuid) as ignored
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/ignore
+# operationId: symbols_ignore
+export def "v01-apps-symbols-ignore ignore" [
+  symbol_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/ignore")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the URL to download the symbol
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/location
+# operationId: symbols_getLocation
+export def "v01-apps-symbols-location get" [
+  symbol_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<uri: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/location")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a particular symbol by id (uuid) for the provided application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/status
+# operationId: symbols_getStatus
+export def "v01-apps-symbols-status get" [
+  symbol_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_id: string, status: string, symbol_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/status")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the details of all teams that have access to the app.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/teams
+# operationId: apps_getTeams
+export def "v01-apps-teams get" [
+  app_name: string
+  owner_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, display_name: string, id: string, name: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/teams")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists all the endpoints available for Test apps data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export
+# operationId: test_gdprExportApps
+export def "v01-apps-test-export gdprExportApps" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<resources: table<path: string, rel: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists app data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export/apps
+# operationId: test_gdprExportApp
+export def "v01-apps-test-export-apps gdprExportApp" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<hash_files_url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/apps")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists file set file data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export/fileSetFiles
+# operationId: test_gdprExportFileSetFile
+export def "v01-apps-test-export-file-set-files gdprExportFileSetFile" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_upload_id: string, hash_file_id: string, hash_file_url: string, path: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/fileSetFiles")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists hash file data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export/hashFiles
+# operationId: test_gdprExportHashFile
+export def "v01-apps-test-export-hash-files gdprExportHashFile" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<filename: string, id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/hashFiles")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists pipeline test data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export/pipelineTests
+# operationId: test_gdprExportPipelineTest
+export def "v01-apps-test-export-pipeline-tests gdprExportPipelineTest" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_upload_id: string, test_parameters: record> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/pipelineTests")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists test run data
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test/export/testRuns
+# operationId: test_gdprExportTestRun
+export def "v01-apps-test-export-test-runs gdprExportTestRun" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_hash_file_id: string, app_hash_file_url: string, app_icon_url: string, dsym_hash_file_id: string, dsym_hash_file_url: string, id: string, locale: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/testRuns")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of test runs
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_runs
+# operationId: test_getTestRuns
+export def "v01-apps-test-runs list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new test run
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_runs
+# operationId: test_createTestRun
+export def "v01-apps-test-runs createTestRun" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Logically deletes a test run
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
+# operationId: test_archiveTestRun
+export def "v01-apps-test-runs archiveTestRun" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a single test runs
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
+# operationId: test_getTestRun
+export def "v01-apps-test-runs get" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Uploads file for a test run
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/files
+# operationId: test_startUploadingFile
+export def "v01-apps-test-runs-files startUploadingFile" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/files")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds file with the given hash to a test run
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes
+# operationId: test_uploadHash
+export def "v01-apps-test-runs-hashes uploadHash" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --byte-range: string # Range of bytes required to verify ownership of the file
+  checksum: string # SHA256 hash of the file
+  file_type: string@file-type-completer # Type of the file
+  relative_path: string # Relative path of the file
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/hashes")
+  let body = {byte_range: $byte_range, checksum: $checksum, file_type: $file_type, relative_path: $relative_path} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Adds file with the given hash to a test run
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes/batch
+# operationId: test_uploadHashesBatch
+export def "v01-apps-test-runs-hashes-batch uploadHashesBatch" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> table<checksum: string, fileType: string, relativePath: string, uploadStatus: record<location: string, statusCode: float>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/hashes/batch")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a single test report
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/report
+# operationId: test_getTestReport
+export def "v01-apps-test-runs-report get" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<app_upload_id: string, date: string, date_finished: string, device_logs: table<appium_log: string, device_log: string, device_snapshot_id: string, test_log: string>, errorMessage: string, features: table<failed: float, name: string, peakDuration: float, peakMemory: float, skipped: float, tests: list>, finished_device_snapshots: list<string>, id: string, platform: string, revision: float, schema_version: float, snapshot_fatal_errors: table<device_snapshot_id: string, error_message: string, error_title: string>, stats: record<artifacts: record, devices: float, devices_failed: float, devices_finished: float, devices_not_runned: float, devices_skipped: float, failed: float, filesize: float, os: float, passed: float, skipped: float, step_count: float, total: float, totalDeviceMinutes: float>, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/report")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Starts test run
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/start
+# operationId: test_startTestRun
+export def "v01-apps-test-runs-start startTestRun" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  device_selection: string # Device selection string.
+  --language: string # Language that should be used to run tests.
+  --locale: string # Locale that should be used to run tests.
+  test_framework: string # Test framework used by tests.
+  --test-parameters: record # A JSON dictionary with additional test parameters
+  --test-series: string # Name of the test series.
+]: any -> record<accepted_devices: list<string>, rejected_devices: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/start")
+  let body = {device_selection: $device_selection, language: $language, locale: $locale, test_framework: $test_framework, test_parameters: $test_parameters, test_series: $test_series} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets state of the test run
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/state
+# operationId: test_getTestRunState
+export def "v01-apps-test-runs-state get" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<exit_code: int, message: list<string>, wait_time: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/state")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Stop a test run execution
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/stop
+# operationId: test_stopTestRun
+export def "v01-apps-test-runs-stop stopTestRun" [
+  test_run_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/stop")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns list of all test series for an application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_series
+# operationId: test_getAllTestSeries
+export def "v01-apps-test-series get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-query: string # A query string to filter test series
+]: nothing -> table<mostRecentActivity: string, name: string, slug: string, testRuns: list<record>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates new test series for an application
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/test_series
+# operationId: test_createTestSeries
+export def "v01-apps-test-series createTestSeries" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  name: string # Name of the new test series
+]: any -> record<mostRecentActivity: string, name: string, slug: string, testRuns: table<completed: bool, date: string, failed: float, passed: float, statusDescription: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series")
+  let body = {name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a single test series
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
+# operationId: test_deleteTestSeries
+export def "v01-apps-test-series delete" [
+  test_series_slug: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates name and slug of a test series
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
+# operationId: test_patchTestSeries
+export def "v01-apps-test-series patch" [
+  test_series_slug: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  name: string # Name of the new test series
+]: any -> record<mostRecentActivity: string, name: string, slug: string, testRuns: table<completed: bool, date: string, failed: float, passed: float, statusDescription: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)")
+  let body = {name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns list of all test runs for a given test series
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}/test_runs
+# operationId: test_getAllTestRunsForSeries
+export def "v01-apps-test-series-test-runs get" [
+  test_series_slug: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)/test_runs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the testers associated with the app specified with the given app name which belongs to the given owner.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/testers
+# operationId: apps_listTesters
+export def "v01-apps-testers listTesters" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/testers")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete the given tester from the all releases
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/testers/{tester_id}
+# operationId: releases_deleteTesterFromDestinations
+export def "v01-apps-testers delete" [
+  tester_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/testers/($tester_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns available toolsets for application
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/toolsets
+# operationId: builds_listToolsets
+export def "v01-apps-toolsets listToolsets" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --tools: string@tools-completer # Toolset name
+]: nothing -> record<node: table<current: bool, name: string>, xamarin: table<current: bool, monoVersion: string, sdkBundle: string, stable: bool, xcodeVersions: list>, xcode: table<current: bool, name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "tools" $tools "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/toolsets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Transfers ownership of an app to a different user or organization
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/transfer/{destination_owner_name}
+# operationId: apps_transferOwnership
+export def "v01-apps-transfer transferOwnership" [
+  owner_name: string
+  app_name: string
+  destination_owner_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/transfer/($destination_owner_name)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Transfers ownership of an app to a new organization
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/transfer_to_org
+# operationId: apps_transferToOrg
+export def "v01-apps-transfer-to-org transferToOrg" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/transfer_to_org")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Initiate a new release upload. This API is part of multi-step upload process.
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/uploads/releases
+# operationId: releases_createReleaseUpload
+export def "v01-apps-uploads-releases createReleaseUpload" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --build-number: string # User defined build number
+  --build-version: string # User defined build version
+]: any -> record<id: string, package_asset_id: string, token: string, upload_domain: string, url_encoded_token: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases")
+  let body = {build_number: $build_number, build_version: $build_version} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get the current status of the release upload.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
+# operationId: releases_getReleaseUploadStatus
+export def "v01-apps-uploads-releases get" [
+  upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error_details: string, id: string, release_distinct_id: float, release_url: any, upload_status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases/($upload_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update the current status of the release upload.
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
+# operationId: releases_updateReleaseUploadStatus
+export def "v01-apps-uploads-releases updateReleaseUploadStatus" [
+  upload_id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --extract: oneof<nothing, bool> # A flag that indicates to extract release or not, true by default
+  upload_status: string@upload-status-completer # The new status of the release upload
+]: any -> record<id: string, upload_status: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "extract" $extract "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases/($upload_id)" $qp)
+  let body = {upload_status: $upload_status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists device sets belonging to the user
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets
+# operationId: test_listDeviceSetsOfUser
+export def "v01-apps-user-device-sets listDeviceSetsOfUser" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<deviceConfigurations: list<record>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a device set belonging to the user
+#
+# POST /v0.1/apps/{owner_name}/{app_name}/user/device_sets
+# operationId: test_createDeviceSetOfUser
+export def "v01-apps-user-device-sets createDeviceSetOfUser" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  devices: list # List of device IDs
+  name: string # The name of the device set
+]: any -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets")
+  let body = {devices: $devices, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a device set belonging to the user
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
+# operationId: test_deleteDeviceSetOfUser
+export def "v01-apps-user-device-sets delete" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a device set belonging to the user
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
+# operationId: test_getDeviceSetOfUser
+export def "v01-apps-user-device-sets get" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a device set belonging to the user
+#
+# PUT /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
+# operationId: test_updateDeviceSetOfUser
+export def "v01-apps-user-device-sets updateDeviceSetOfUser" [
+  id: string
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  devices: list # List of device IDs
+  name: string # The name of the device set
+]: any -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
+  let body = {devices: $devices, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the users associated with the app specified with the given app name which belongs to the given owner.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/users
+# operationId: users_list
+export def "v01-apps-users list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Removes the user from the app
+#
+# DELETE /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
+# operationId: apps_removeUser
+export def "v01-apps-users removeUser" [
+  owner_name: string
+  app_name: string
+  user_email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users/($user_email)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update user permission for the app
+#
+# PATCH /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
+# operationId: apps_updateUserPermissions
+export def "v01-apps-users updateUserPermissions" [
+  owner_name: string
+  app_name: string
+  user_email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  permissions: list # The permissions the user has for the app
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users/($user_email)")
+  let body = {permissions: $permissions} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets a list of application versions.
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/versions
+# DEPRECATED
+# operationId: crashes_getAppVersions
+@deprecated
+export def "v01-apps-versions get" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<app_id: string, app_version: string, app_version_id: string, build_number: string, display_name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/versions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get web hooks configured for a particular app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/webhooks
+# operationId: webhooks_list
+export def "v01-apps-webhooks list" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<values: table<enabled: bool, event_types: list, id: string, name: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/webhooks")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the Xamarin SDK bundles available to this app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/xamarin_sdk_bundles
+# DEPRECATED
+# operationId: builds_listXamarinSDKBundles
+@deprecated
+export def "v01-apps-xamarin-sdk-bundles listXamarinSDKBundles" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<current: bool, monoVersion: string, sdkBundle: string, stable: bool, xcodeVersions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/xamarin_sdk_bundles")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the Xcode versions available to this app
+#
+# GET /v0.1/apps/{owner_name}/{app_name}/xcode_versions
+# DEPRECATED
+# operationId: builds_listXcodeVersions
+@deprecated
+export def "v01-apps-xcode-versions listXcodeVersions" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<current: bool, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/xcode_versions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of azure subscriptions for the user
+#
+# GET /v0.1/azure_subscriptions
+# operationId: azureSubscription_listForUser
+export def "v01-azure-subscriptions listForUser" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/azure_subscriptions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Aggregated Billing Information for the requesting user and the organizations in which the user is an admin.
+#
+# GET /v0.1/billing/allAccountsAggregated
+# operationId: billingAggregatedInformation_getAll
+export def "v01-billing-all-accounts-aggregated get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --service: string@service-completer # Type of service that should be included in the Billing Information
+  --period: string@period-completer # Type of period that should be included in the Billing Information
+  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+]: nothing -> record<aggregatedBillings: record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record, testService: record>, id: string, timestamp: string, usage: record<buildService: record, testService: record>, version: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v0.1/billing/allAccountsAggregated" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns all invitations sent by the caller
+#
+# GET /v0.1/invitations/sent
+# operationId: invitations_sent
+export def "v01-invitations-sent sent" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<app: record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record, release_type: string, app_secret: string, azure_subscription: record, created_at: string, member_permissions: list, origin: string, platform: string, updated_at: string>, invitation_id: string, organization: record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/invitations/sent")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Report deploy of specified release
+#
+# POST /v0.1/legacy/reportStatus/deploy
+# operationId: legacyCodePushAcquisition_updateInstallsStatus
+export def "v01-legacy-report-status-deploy updateInstallsStatus" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --appVersion: string
+  --clientUniqueId: string
+  --deploymentKey: string
+  --label: string
+  --previousDeploymentKey: string
+  --previousLabelOrAppVersion: string
+  --status: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/legacy/reportStatus/deploy")
+  let body = {appVersion: $appVersion, clientUniqueId: $clientUniqueId, deploymentKey: $deploymentKey, label: $label, previousDeploymentKey: $previousDeploymentKey, previousLabelOrAppVersion: $previousLabelOrAppVersion, status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Report download of specified release
+#
+# POST /v0.1/legacy/reportStatus/download
+# operationId: legacyCodePushAcquisition_updateDownloadStatus
+export def "v01-legacy-report-status-download updateDownloadStatus" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --appVersion: string
+  --clientUniqueId: string
+  --deploymentKey: string
+  --label: string
+  --previousDeploymentKey: string
+  --previousLabelOrAppVersion: string
+  --status: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/legacy/reportStatus/download")
+  let body = {appVersion: $appVersion, clientUniqueId: $clientUniqueId, deploymentKey: $deploymentKey, label: $label, previousDeploymentKey: $previousDeploymentKey, previousLabelOrAppVersion: $previousLabelOrAppVersion, status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Check for updates
+#
+# GET /v0.1/legacy/updateCheck
+# operationId: legacyCodePushAcquisition_updateCheck
+export def "v01-legacy-update-check updateCheck" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --deploymentKey: string
+  --appVersion: string
+  --packageHash: string
+  --label: string
+  --clientUniqueId: string
+  --isCompanion: string
+]: nothing -> record<updateInfo: record<appVersion: string, description: string, isDisabled: bool, isMandatory: bool, rollout: int, downloadURL: string, isAvailable: bool, label: string, packageHash: string, packageSize: float, shouldRunBinaryVersion: bool, updateAppVersion: bool>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "deploymentKey" $deploymentKey "scalar") (serialize-qp "appVersion" $appVersion "scalar") (serialize-qp "packageHash" $packageHash "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "clientUniqueId" $clientUniqueId "scalar") (serialize-qp "isCompanion" $isCompanion "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v0.1/legacy/updateCheck" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of organizations the requesting user has access to
+#
+# GET /v0.1/orgs
+# operationId: organizations_list
+export def "v01-orgs list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<display_name: string, name: string, origin: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/orgs")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new organization and returns it to the caller
+#
+# POST /v0.1/orgs
+# operationId: organizations_createOrUpdate
+export def "v01-orgs createOrUpdate" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --display-name: string # The display name of the organization
+  --name: string # The name of the organization used in URLs
+]: any -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/orgs")
+  let body = {display_name: $display_name, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Aggregated Billing Information for a given Organization.
+#
+# GET /v0.1/orgs/{orgName}/billing/aggregated
+# operationId: billingAggregatedInformation_getForOrg
+export def "v01-orgs-billing-aggregated get" [
+  orgName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --service: string@service-completer # Type of service that should be included in the Billing Information
+  --period: string@period-completer # Type of period that should be included in the Billing Information
+  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+]: nothing -> record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>, testService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>>, id: string, timestamp: string, usage: record<buildService: record<currentUsagePeriod: record>, testService: record<currentUsagePeriod: record>>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/orgs/($orgName)/billing/aggregated" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a single organization
+#
+# DELETE /v0.1/orgs/{org_name}
+# operationId: organizations_delete
+export def "v01-orgs delete" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the details of a single organization
+#
+# GET /v0.1/orgs/{org_name}
+# operationId: organizations_get
+export def "v01-orgs get" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of organizations the requesting user has access to
+#
+# PATCH /v0.1/orgs/{org_name}
+# operationId: organizations_update
+export def "v01-orgs update" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --display-name: string # The full (friendly) name of the organization.
+  --name: string # The name of the organization used in URLs
+]: any -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
+  let body = {display_name: $display_name, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a list of apps for the organization
+#
+# GET /v0.1/orgs/{org_name}/apps
+# operationId: apps_listForOrg
+export def "v01-orgs-apps listForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/apps")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new app for the organization and returns it to the caller
+#
+# POST /v0.1/orgs/{org_name}/apps
+# operationId: apps_createForOrg
+export def "v01-orgs-apps createForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # A short text describing the app
+  display_name: string # The descriptive name of the app. This can contain any characters
+  --name: string # The name of the app used in URLs
+  os: string@os-completer # The OS the app will be running on
+  platform: string@platform-completer # The platform of the app
+  --release-type: string # A one-word descriptive release-type value that starts with a capital letter but is otherwise lowercase
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/apps")
+  let body = {description: $description, display_name: $display_name, name: $name, os: $os, platform: $platform, release_type: $release_type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the uploaded organization avatar
+#
+# DELETE /v0.1/orgs/{org_name}/avatar
+# operationId: organization_deleteAvatar
+export def "v01-orgs-avatar delete" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/avatar")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Sets the organization avatar
+#
+# POST /v0.1/orgs/{org_name}/avatar
+# operationId: organization_updateAvatar
+export def "v01-orgs-avatar updateAvatar" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --avatar: string # The image for an Organization avatar to upload. (format: binary)
+]: any -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/avatar")
+  let body = {avatar: $avatar} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Returns a list of azure subscriptions for the organization
+#
+# GET /v0.1/orgs/{org_name}/azure_subscriptions
+# operationId: azureSubscription_listForOrg
+export def "v01-orgs-azure-subscriptions listForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/azure_subscriptions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of distribution groups in the org specified
+#
+# GET /v0.1/orgs/{org_name}/distribution_groups
+# operationId: distributionGroups_listForOrg
+export def "v01-orgs-distribution-groups listForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a disribution goup which can be shared across apps under an organization
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups
+# operationId: distributionGroups_createForOrg
+export def "v01-orgs-distribution-groups createForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --display-name: string # The display name of the distribution group. If not specified, the name will be used.
+  name: string # The name of the distribution group
+]: any -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups")
+  let body = {display_name: $display_name, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a single distribution group from an org with a given distribution group name
+#
+# DELETE /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_deleteForOrg
+export def "v01-orgs-distribution-groups delete" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a single distribution group in org for a given distribution group name
+#
+# GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_getForOrg
+export def "v01-orgs-distribution-groups get" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update one given distribution group name in an org
+#
+# PATCH /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
+# operationId: distributionGroups_patchForOrg
+export def "v01-orgs-distribution-groups patch" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --is-public: oneof<nothing, bool> # Whether the distribution group is public
+  --name: string # The name of the distribution group
+]: any -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
+  let body = {is_public: $is_public, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get apps from a distribution group in an org
+#
+# GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps
+# operationId: distributionGroups_getApps
+export def "v01-orgs-distribution-groups-apps get" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, origin: string, platform: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add apps to distribution group in an org
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps
+# operationId: distributionGroups_addApps
+# --apps item shape: {name: string}
+export def "v01-orgs-distribution-groups-apps addApps" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --apps: list # The list of apps to add to distribution group — item shape: {name: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps")
+  let body = {apps: $apps} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete apps from distribution group in an org
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps/bulk_delete
+# operationId: distributionGroups_bulkDeleteApps
+# --apps item shape: {name: string}
+export def "v01-orgs-distribution-groups-apps-bulk-delete bulkDeleteApps" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --apps: list # The list of apps to delete from the distribution group — item shape: {name: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps/bulk_delete")
+  let body = {apps: $apps} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a list of member in the distribution group specified
+#
+# GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
+# operationId: distributionGroups_listUsersForOrg
+export def "v01-orgs-distribution-groups-members listUsersForOrg" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, invite_pending: bool, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Accepts an array of user email addresses to get added to the specified group
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
+# operationId: distributionGroups_addUsersForOrg
+export def "v01-orgs-distribution-groups-members addUsersForOrg" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> table<code: string, invite_pending: bool, message: string, status: int, user_email: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete testers from distribution group in an org
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members/bulk_delete
+# operationId: distributionGroups_bulkDeleteUsers
+export def "v01-orgs-distribution-groups-members-bulk-delete bulkDeleteUsers" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members/bulk_delete")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Resend shared distribution group invite notification to previously invited testers
+#
+# POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/resend_invite
+# operationId: distributionGroups_resendSharedInvite
+export def "v01-orgs-distribution-groups-resend-invite resendSharedInvite" [
+  org_name: string
+  distribution_group_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --user-emails: list # The list of emails of the users
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/resend_invite")
+  let body = {user_emails: $user_emails} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a list of distribution groups with details for an organization
+#
+# GET /v0.1/orgs/{org_name}/distribution_groups_details
+# operationId: distributionGroups_detailsForOrg
+export def "v01-orgs-distribution-groups-details detailsForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --apps-limit: float # The max number of apps to include in the response
+]: nothing -> table<display_name: string, id: string, is_public: bool, name: string, origin: string, apps: list<record>, total_apps_count: float, total_users_count: float> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "apps_limit" $apps_limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups_details" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Removes a user's invitation to an organization
+#
+# DELETE /v0.1/orgs/{org_name}/invitations
+# operationId: orgInvitations_delete
+export def "v01-orgs-invitations delete" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  user_email: string # The user's email address
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
+  let body = {user_email: $user_email} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Gets the pending invitations for the organization
+#
+# GET /v0.1/orgs/{org_name}/invitations
+# operationId: orgInvitations_listPending
+export def "v01-orgs-invitations listPending" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<email: string, id: string, role: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Invites a new or existing user to an organization
+#
+# POST /v0.1/orgs/{org_name}/invitations
+# operationId: orgInvitations_create
+export def "v01-orgs-invitations create" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The user's role
+  user_email: string # The user's email address
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
+  let body = {role: $role, user_email: $user_email} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Allows the role of an invited user to be changed
+#
+# PATCH /v0.1/orgs/{org_name}/invitations/{email}
+# operationId: orgInvitations_update
+export def "v01-orgs-invitations update" [
+  org_name: string
+  email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The user's role in the organizatiion
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)")
+  let body = {role: $role} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Cancels an existing organization invitation for the user and sends a new one
+#
+# POST /v0.1/orgs/{org_name}/invitations/{email}/resend
+# operationId: orgInvitations_sendNewInvitation
+export def "v01-orgs-invitations-resend sendNewInvitation" [
+  org_name: string
+  email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The role of the user to be added
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)/resend")
+  let body = {role: $role} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes a user's invitation to an organization
+#
+# POST /v0.1/orgs/{org_name}/invitations/{email}/revoke
+# operationId: orgInvitations_
+export def "v01-orgs-invitations-revoke " [
+  org_name: string
+  email: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)/revoke")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the list of all teams in this org
+#
+# GET /v0.1/orgs/{org_name}/teams
+# operationId: teams_listAll
+export def "v01-orgs-teams listAll" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, display_name: string, id: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a team and returns it
+#
+# POST /v0.1/orgs/{org_name}/teams
+# operationId: teams_createTeam
+export def "v01-orgs-teams createTeam" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --description: string # The description of the team
+  display_name: string # The display name of the team
+  --name: string # The name of the team
+]: any -> table<description: string, display_name: string, id: string, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams")
+  let body = {description: $description, display_name: $display_name, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a single team
+#
+# DELETE /v0.1/orgs/{org_name}/teams/{team_name}
+# operationId: teams_delete
+export def "v01-orgs-teams delete" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the details of a single team
+#
+# GET /v0.1/orgs/{org_name}/teams/{team_name}
+# operationId: teams_getTeam
+export def "v01-orgs-teams get" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<description: string, display_name: string, id: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a single team
+#
+# PATCH /v0.1/orgs/{org_name}/teams/{team_name}
+# operationId: teams_update
+export def "v01-orgs-teams update" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  display_name: string # The new display name of the team
+]: any -> record<description: string, display_name: string, id: string, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
+  let body = {display_name: $display_name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the apps a team has access to
+#
+# GET /v0.1/orgs/{org_name}/teams/{team_name}/apps
+# operationId: teams_listApps
+export def "v01-orgs-teams-apps listApps" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<team_permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds an app to a team
+#
+# POST /v0.1/orgs/{org_name}/teams/{team_name}/apps
+# operationId: teams_addApp
+export def "v01-orgs-teams-apps addApp" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  name: string # The name of the app to be added to the distribution group
+]: any -> record<team_permissions: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps")
+  let body = {name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes an app from a team
+#
+# DELETE /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
+# operationId: teams_removeApp
+export def "v01-orgs-teams-apps removeApp" [
+  org_name: string
+  team_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps/($app_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the permissions the team has to the app
+#
+# PATCH /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
+# operationId: teams_updatePermissions
+export def "v01-orgs-teams-apps updatePermissions" [
+  org_name: string
+  team_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  permissions: list # The permissions all members of the team have on the app
+]: any -> record<team_permissions: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps/($app_name)")
+  let body = {permissions: $permissions} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the users of a team which is owned by an organization
+#
+# GET /v0.1/orgs/{org_name}/teams/{team_name}/users
+# operationId: teams_getUsers
+export def "v01-orgs-teams-users get" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<display_name: string, email: string, name: string, role: any> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds a new user to a team that is owned by an organization
+#
+# POST /v0.1/orgs/{org_name}/teams/{team_name}/users
+# operationId: teams_addUser
+export def "v01-orgs-teams-users addUser" [
+  org_name: string
+  team_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  user_email: string # The user's email address
+]: any -> record<display_name: string, email: string, name: string, role: any> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users")
+  let body = {user_email: $user_email} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes a user from a team that is owned by an organization
+#
+# DELETE /v0.1/orgs/{org_name}/teams/{team_name}/users/{user_name}
+# operationId: teams_removeUser
+export def "v01-orgs-teams-users removeUser" [
+  org_name: string
+  team_name: string
+  user_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users/($user_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a unique list of users including the whole organization members plus testers in any shared group of that org
+#
+# GET /v0.1/orgs/{org_name}/testers
+# operationId: distributionGroups_listAllTestersForOrg
+export def "v01-orgs-testers listAllTestersForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<display_name: string, email: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/testers")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of users that belong to an organization
+#
+# GET /v0.1/orgs/{org_name}/users
+# operationId: users_listForOrg
+export def "v01-orgs-users listForOrg" [
+  org_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<display_name: string, email: string, joined_at: string, name: string, role: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Removes a user from an organization.
+#
+# DELETE /v0.1/orgs/{org_name}/users/{user_name}
+# operationId: users_removeFromOrg
+export def "v01-orgs-users removeFromOrg" [
+  org_name: string
+  user_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<error: record<code: string, message: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a user information from an organization by name - if there is explicit permission return it, if not if not return highest implicit permission
+#
+# GET /v0.1/orgs/{org_name}/users/{user_name}
+# operationId: users_getForOrg
+export def "v01-orgs-users get" [
+  org_name: string
+  user_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<display_name: string, email: string, joined_at: string, name: string, role: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the given organization user
+#
+# PATCH /v0.1/orgs/{org_name}/users/{user_name}
+# operationId: users_updateOrgRole
+export def "v01-orgs-users updateOrgRole" [
+  org_name: string
+  user_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --role: string@role-completer # The user's role in the organizatiion
+]: any -> record<display_name: string, email: string, joined_at: string, name: string, role: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
+  let body = {role: $role} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get a user apps information from an organization by name
+#
+# GET /v0.1/orgs/{org_name}/users/{user_name}/apps
+# operationId: apps_getForOrgUser
+export def "v01-orgs-users-apps get" [
+  org_name: string
+  user_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)/apps")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the manifest.plist in XML format for installing the release on a device. Only available for iOS.
+#
+# GET /v0.1/public/apps/{app_id}/releases/{release_id}/ios_manifest
+# operationId: releases_getIosManifest
+export def "v01-public-apps-releases-ios-manifest get" [
+  app_id: string
+  release_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-token: string # A hash that authorizes the download if it matches the release info.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/public/apps/($app_id)/releases/($release_id)/ios_manifest" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Notify download(s) for the provided distribution release(s).
+#
+# POST /v0.1/public/apps/{owner_name}/{app_name}/install_analytics
+# operationId: distibutionReleases_installAnalytics
+# --releases item shape: {distribution_group_id: string, release_id: int, user_id: string}
+export def "v01-public-apps-install-analytics installAnalytics" [
+  owner_name: string
+  app_name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --releases: list # item shape: {distribution_group_id: string, release_id: int, user_id: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/public/apps/($owner_name)/($app_name)/install_analytics")
+  let body = {releases: $releases} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Report Deployment status metric
+#
+# POST /v0.1/public/codepush/report_status/deploy
+# operationId: codePushAcquisition_updateDeployStatus
+export def "v01-public-codepush-report-status-deploy updateDeployStatus" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-version: string
+  --client-unique-id: string
+  deployment_key: string
+  --label: string
+  --previous-deployment-key: string
+  --previous-label-or-app-version: string
+  --status: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/public/codepush/report_status/deploy")
+  let body = {app_version: $app_version, client_unique_id: $client_unique_id, deployment_key: $deployment_key, label: $label, previous_deployment_key: $previous_deployment_key, previous_label_or_app_version: $previous_label_or_app_version, status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Report download of specified release
+#
+# POST /v0.1/public/codepush/report_status/download
+# operationId: codePushAcquisition_updateDownloadStatus
+export def "v01-public-codepush-report-status-download updateDownloadStatus" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-version: string
+  --client-unique-id: string
+  deployment_key: string
+  --label: string
+  --previous-deployment-key: string
+  --previous-label-or-app-version: string
+  --status: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/public/codepush/report_status/download")
+  let body = {app_version: $app_version, client_unique_id: $client_unique_id, deployment_key: $deployment_key, label: $label, previous_deployment_key: $previous_deployment_key, previous_label_or_app_version: $previous_label_or_app_version, status: $status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the acquisition service status to the caller
+#
+# GET /v0.1/public/codepush/status
+# operationId: codePushAcquisition_getAcquisitionStatus
+export def "v01-public-codepush-status get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/public/codepush/status")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Check for updates
+#
+# GET /v0.1/public/codepush/update_check
+# operationId: codePushAcquisition_updateCheck
+export def "v01-public-codepush-update-check updateCheck" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --deployment-key: string
+  --app-version: string
+  --package-hash: string
+  --label: string
+  --client-unique-id: string
+  --is-companion: oneof<nothing, bool>
+  --previous-label-or-app-version: string
+  --previous-deployment-key: string
+]: nothing -> record<update_info: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, download_url: string, is_available: bool, label: string, package_hash: string, package_size: float, should_run_binary_version: bool, update_app_version: bool>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "deployment_key" $deployment_key "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "package_hash" $package_hash "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "client_unique_id" $client_unique_id "scalar") (serialize-qp "is_companion" $is_companion "scalar") (serialize-qp "previous_label_or_app_version" $previous_label_or_app_version "scalar") (serialize-qp "previous_deployment_key" $previous_deployment_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v0.1/public/codepush/update_check" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Public webhook sink
+#
+# POST /v0.1/public/hooks
+# operationId: builds_webhook
+export def "v01-public-hooks webhook" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<code: string, id: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/public/hooks")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get a release with 'latest' for the given public group.
+#
+# GET /v0.1/public/sdk/apps/{app_secret}/distribution_groups/{distribution_group_id}/releases/latest
+# operationId: releases_getLatestByPublicDistributionGroup
+export def "v01-public-sdk-apps-distribution-groups-releases-latest get" [
+  app_secret: string
+  distribution_group_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/distribution_groups/($distribution_group_id)/releases/latest" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the latest public release for the given app.
+#
+# GET /v0.1/public/sdk/apps/{app_secret}/releases/latest
+# DEPRECATED
+# operationId: releases_getLatestPublicRelease
+@deprecated
+export def "v01-public-sdk-apps-releases-latest get" [
+  app_secret: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/releases/latest")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all public distribution groups that a given release has been distributed to
+#
+# GET /v0.1/public/sdk/apps/{app_secret}/releases/{release_hash}/public_distribution_groups
+# operationId: releases_getPublicGroupsForReleaseByHash
+export def "v01-public-sdk-apps-releases-public-distribution-groups get" [
+  app_secret: string
+  release_hash: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/releases/($release_hash)/public_distribution_groups")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the sparkle feed of the releases that are distributed to all the public distribution groups.
+#
+# GET /v0.1/public/sparkle/apps/{app_secret}
+# operationId: releases_getSparkleFeed
+export def "v01-public-sparkle-apps get" [
+  app_secret: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/public/sparkle/apps/($app_secret)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the latest release distributed to a private group the given user is a member of for the given app.
+#
+# GET /v0.1/sdk/apps/{app_secret}/releases/private/latest
+# operationId: releases_getLatestPrivateRelease
+export def "v01-sdk-apps-releases-private-latest get" [
+  app_secret: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --udid: string # When passing `udid` in the query string, a provisioning check for the given device ID will be done. Will be ignored for non-iOS platforms.
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "udid" $udid "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/sdk/apps/($app_secret)/releases/private/latest" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# If 'latest' is not specified then it will return the specified release if it's enabled. If 'latest' is specified, regardless of whether a release hash is provided, the latest enabled release is returned.
+#
+# GET /v0.1/sdk/apps/{app_secret}/releases/{release_hash}
+# operationId: releases_getLatestByHash
+export def "v01-sdk-apps-releases get" [
+  app_secret: string
+  release_hash: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --udid: string # When passing `udid` in the query string, a provisioning check for the given device ID will be done. Will be ignored for non-iOS platforms.
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "udid" $udid "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/sdk/apps/($app_secret)/releases/($release_hash)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the user profile data
+#
+# GET /v0.1/user
+# operationId: users_get
+export def "v01-user get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the user profile and returns the updated user data
+#
+# PATCH /v0.1/user
+# operationId: users_update
+export def "v01-user update" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --display-name: string # The full name of the user. Might for example be first and last name
+]: any -> record<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user")
+  let body = {display_name: $display_name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns all devices associated with the given user.
+#
+# GET /v0.1/user/devices
+# operationId: devices_userDevicesList
+export def "v01-user-devices userDevicesList" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<device_name: string, full_device_name: string, imei: string, model: string, os_build: string, os_version: string, owner_id: string, registered_at: string, serial: string, status: string, udid: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/devices")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Removes an existing device from a user
+#
+# DELETE /v0.1/user/devices/{device_udid}
+# operationId: devices_removeUserDevice
+export def "v01-user-devices removeUserDevice" [
+  device_udid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/devices/($device_udid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the device details.
+#
+# GET /v0.1/user/devices/{device_udid}
+# operationId: devices_deviceDetails
+export def "v01-user-devices deviceDetails" [
+  device_udid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<device_name: string, full_device_name: string, imei: string, model: string, os_build: string, os_version: string, owner_id: string, registered_at: string, serial: string, status: string, udid: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/devices/($device_udid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v0.1/user/dsr/delete
+#
+# operationId: DataSubjectRight_DeleteRequest
+export def "v01-user-dsr-delete DeleteRequest" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<createdAt: string, token: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/dsr/delete")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v0.1/user/dsr/delete/{token}
+#
+# operationId: DataSubjectRight_DeleteStatusRequest
+export def "v01-user-dsr-delete DeleteStatusRequest" [
+  token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --email: string # Email used for delete with x-authz-bypass headers
+]: nothing -> record<message: string, sasUrl: string, sasUrlExpired: bool, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v0.1/user/dsr/delete/($token)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v0.1/user/dsr/delete/{token}/cancel
+#
+# operationId: DataSubjectRight_CancelDeleteRequest
+export def "v01-user-dsr-delete-cancel CancelDeleteRequest" [
+  token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  email: string # Email used for cancel delete with x-authz-bypass headers
+]: any -> record<createdAt: string, token: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/dsr/delete/($token)/cancel")
+  let body = {email: $email} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# POST /v0.1/user/dsr/export
+#
+# operationId: DataSubjectRight_ExportRequest
+export def "v01-user-dsr-export ExportRequest" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<createdAt: string, token: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/dsr/export")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v0.1/user/dsr/export/{token}
+#
+# operationId: DataSubjectRight_ExportStatusRequest
+export def "v01-user-dsr-export ExportStatusRequest" [
+  token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<message: string, sasUrl: string, sasUrlExpired: bool, status: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/dsr/export/($token)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v0.1/user/dsr/export/{token}/cancel
+#
+# operationId: DataSubjectRight_CancelExportRequest
+export def "v01-user-dsr-export-cancel CancelExportRequest" [
+  token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<createdAt: string, token: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/dsr/export/($token)/cancel")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets all service connections of the service type for GDPR export.
+#
+# GET /v0.1/user/export/serviceConnections
+# operationId: sharedconnection_Connections
+export def "v01-user-export-service-connections Connections" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> table<credentialType: string, displayName: string, serviceType: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/export/serviceConnections")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Accepts a pending invitation for the specified user
+#
+# POST /v0.1/user/invitations/apps/{invitation_token}/accept
+# operationId: appInvitations_accept
+export def "v01-user-invitations-apps-accept accept" [
+  invitation_token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/invitations/apps/($invitation_token)/accept")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Rejects a pending invitation for the specified user
+#
+# POST /v0.1/user/invitations/apps/{invitation_token}/reject
+# operationId: appInvitations_reject
+export def "v01-user-invitations-apps-reject reject" [
+  invitation_token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/invitations/apps/($invitation_token)/reject")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Accepts all pending invitations to distribution groups for the specified user
+#
+# POST /v0.1/user/invitations/distribution_groups/accept
+# operationId: distributionGroupInvitations_acceptAll
+export def "v01-user-invitations-distribution-groups-accept acceptAll" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/invitations/distribution_groups/accept")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Accepts a pending organization invitation for the specified user
+#
+# POST /v0.1/user/invitations/orgs/{invitation_token}/accept
+# operationId: orgInvitations_accept
+export def "v01-user-invitations-orgs-accept accept" [
+  invitation_token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/invitations/orgs/($invitation_token)/accept")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Rejects a pending organization invitation
+#
+# POST /v0.1/user/invitations/orgs/{invitation_token}/reject
+# operationId: orgInvitations_reject
+export def "v01-user-invitations-orgs-reject reject" [
+  invitation_token: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> record<error: record<code: string, message: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/user/invitations/orgs/($invitation_token)/reject")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# GET /v0.1/user/metadata/optimizely
+#
+# operationId: Users_getUserMetadata
+export def "v01-user-metadata-optimizely get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<metadata: record, userId: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/metadata/optimizely")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get Default email notification settings for the user
+#
+# GET /v0.1/user/notifications/emailSettings
+# operationId: notifications_getUserEmailSettings
+export def "v01-user-notifications-email-settings get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v0.1/user/notifications/emailSettings")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Registers a user for an existing device
+#
+# POST /v0.1/users/{user_id}/devices/register
+# operationId: devices_registerUserForDevice
+export def "v01-users-devices-register registerUserForDevice" [
+  user_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --imei: string # The device's International Mobile Equipment Identity number. Always empty or undefined at present.
+  model: string # The model identifier of the device, in the format iDeviceM,N
+  --os-build: string # The build number of the last known OS version running on the device
+  --os-version: string # The last known OS version running on the device
+  --owner-id: string # The user ID of the device owner.
+  --serial: string # The device's serial number. Always empty or undefined at present.
+  udid: string # The Unique Device IDentifier of the device
+]: any -> record<device_name: string, full_device_name: string, imei: string, model: string, os_build: string, os_version: string, owner_id: string, registered_at: string, serial: string, status: string, udid: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v0.1/users/($user_id)/devices/register")
+  let body = {imei: $imei, model: $model, os_build: $os_build, os_version: $os_version, owner_id: $owner_id, serial: $serial, udid: $udid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

@@ -1,0 +1,3003 @@
+# Auto-generated client for ID4i API v1.0.2
+# Source: https://api.apis.guru/v2/specs/id4i.de/1.0.2/openapi.json
+# Auth: --token flag or $env.ID4I_API_TOKEN
+
+const BASE_URL = "http://localhost//backend.id4i.de"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ID4I_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://localhost//backend.id4i.de"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def accept-completer [] { ["application/json" "application/xml"] }
+def type-completer [] { ["LABELLED_COLLECTION" "LOGISTIC_COLLECTION" "ROUTING_COLLECTION"] }
+def physicalState-completer [] { ["ATTACHED" "DETACHED" "UNATTACHED"] }
+def type-completer-1 [] { ["CREATED" "DELIVERY_REFUSED" "DESTROYED" "DISASSEMBLED" "DISPATCHED" "MAINTENANCE_CANCELLED" "MAINTENANCE_FINISHED" "MAINTENANCE_STARTED" "MAINTENANCE_STEP_CANCELLED" "MAINTENANCE_STEP_FINISHED" "MAINTENANCE_STEP_STARTED" "PACKAGED" "PRODUCTION_CANCELLED" "PRODUCTION_FINISHED" "PRODUCTION_STARTED" "PRODUCTION_STEP_CANCELLED" "PRODUCTION_STEP_FINISHED" "PRODUCTION_STEP_STARTED" "QUALITY_CHECK_PERFORMED" "RECEIVED" "RECYCLED" "REPROCESSING_CANCELLED" "REPROCESSING_FINISHED" "REPROCESSING_STARTED" "REPROCESSING_STEP_CANCELLED" "REPROCESSING_STEP_FINISHED" "REPROCESSING_STEP_STARTED" "RETRIEVED_FROM_STORAGE" "SHIPMENT_PREPARED" "STORED"] }
+def aliasType-completer [] { ["article" "eclass" "gtin" "item" "mapp" "material" "product" "reference" "rfid" "tracking" "unspsc"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-password requestPasswordReset" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Request password reset
+#
+# POST /account/password
+# operationId: requestPasswordReset
+export def "account-password requestPasswordReset" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  username: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/account/password")
+  let body = {username: $username} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Verify password reset
+#
+# PUT /account/password
+# operationId: verifyPasswordReset
+export def "account-password verifyPasswordReset" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  password: string
+  --body-token: string
+]: any -> record<message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/account/password")
+  let body = {password: $password, token: $body_token} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Register user
+#
+# POST /account/registration
+# operationId: registerUser
+export def "account-registration registerUser" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  email: string
+  password: string
+  username: string
+]: any -> record<email: string, id: int, message: string, username: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/account/registration")
+  let body = {email: $email, password: $password, username: $username} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Complete registration
+#
+# PUT /account/registration
+# operationId: completeRegistration
+export def "account-registration completeRegistration" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  password: string
+  username: string
+  verificationToken: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/account/registration")
+  let body = {password: $password, username: $username, verificationToken: $verificationToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Verify registration
+#
+# POST /account/verification
+# operationId: verifyUserRegistration
+export def "account-verification verifyUserRegistration" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-token: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/account/verification")
+  let body = {token: $body_token} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Find API key by organization
+#
+# GET /api/v1/apikeys
+# operationId: listAllApiKeysOfOrganization
+export def "apikeys listAllApiKeysOfOrganization" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The namespace of the organization to search in.
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/apikeys" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create API key
+#
+# POST /api/v1/apikeys
+# operationId: createNewApiKey
+export def "apikeys createNewApiKey" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  label: string
+  organizationId: string # e.g. de.acme
+  secret: string
+]: any -> record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/apikeys")
+  let body = {label: $label, organizationId: $organizationId, secret: $secret} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List all privileges
+#
+# GET /api/v1/apikeys/privileges
+# operationId: listAllApiKeyPrivileges
+export def "apikeys-privileges listAllApiKeyPrivileges" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --id4nConcerning: oneof<nothing, bool> # id4nConcerning
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<allowsBillableOperations: bool, helpText: string, id4nAssociated: bool, name: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "id4nConcerning" $id4nConcerning "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/apikeys/privileges" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete API key
+#
+# DELETE /api/v1/apikeys/{key}
+# operationId: deleteApiKey
+export def "apikeys delete" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Show API key
+#
+# GET /api/v1/apikeys/{key}
+# operationId: getApiKey
+export def "apikeys get" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update API keys
+#
+# PUT /api/v1/apikeys/{key}
+# operationId: updateApiKey
+export def "apikeys updateApiKey" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --active: oneof<nothing, bool>
+  newLabel: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)")
+  let body = {active: $active, newLabel: $newLabel} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove privilege
+#
+# DELETE /api/v1/apikeys/{key}/privileges
+# operationId: removeApiKeyPrivilege
+export def "apikeys-privileges removeApiKeyPrivilege" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  privilege: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges")
+  let body = {privilege: $privilege} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List privileges
+#
+# GET /api/v1/apikeys/{key}/privileges
+# operationId: listApiKeyPrivileges
+export def "apikeys-privileges listApiKeyPrivileges" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<id4nAssociated: bool, privilege: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add privilege
+#
+# POST /api/v1/apikeys/{key}/privileges
+# operationId: addApiKeyPrivilege
+export def "apikeys-privileges addApiKeyPrivilege" [
+  key: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  privilege: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges")
+  let body = {privilege: $privilege} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove id4ns of a privilege
+#
+# DELETE /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
+# operationId: removeApiKeyPrivilegeForId4ns
+export def "apikeys-privileges-id4ns removeApiKeyPrivilegeForId4ns" [
+  key: string
+  privilege: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --id4ns: list # A list of id4ns.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges/($privilege)/id4ns")
+  let body = {id4ns: $id4ns} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# ID4ns of a privilege
+#
+# GET /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
+# operationId: listId4ns
+export def "apikeys-privileges-id4ns listId4ns" [
+  key: string
+  privilege: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges/($privilege)/id4ns" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add ID4ns of a privilege
+#
+# POST /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
+# operationId: addApiKeyPrivilegeForId4ns
+export def "apikeys-privileges-id4ns addApiKeyPrivilegeForId4ns" [
+  key: string
+  privilege: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --id4ns: list # A list of id4ns.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/apikeys/($key)/privileges/($privilege)/id4ns")
+  let body = {id4ns: $id4ns} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get billing amount of services for a given organization
+#
+# GET /api/v1/billing/{organizationId}
+# operationId: getSumForOrganization
+export def "billing get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --fromDate: string # Billing start date (format: date-time)
+  --toDate: string # Billing end date (format: date-time)
+]: nothing -> record<listing: record> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/billing/($organizationId)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get billing positions for a given organization
+#
+# GET /api/v1/billing/{organizationId}/positions
+# operationId: getPositionsForOrganization
+export def "billing-positions get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --fromDate: string # Billing start date (format: date-time)
+  --toDate: string # Billing end date (format: date-time)
+]: nothing -> table<amount: int, count: float, description: string, service: string, singlePrice: float, sum: float, unit: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/billing/($organizationId)/positions" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List change log entries of an organization
+#
+# GET /api/v1/changelog/organization/{organizationId}/
+# operationId: listOrganizationChangeLog
+export def "changelog-organization listOrganizationChangeLog" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --messageMimeType: string # The Mime-type for the message format that should be returned. e.g. 'text/plain' or 'text/mustache'  (default: text/mustache)
+  --fromDate: string # From date time as UTC Date-Time format (format: date-time)
+  --toDate: string # To date time as UTC Date-Time format (format: date-time)
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<id: string, message: string, messageProperties: record, timestamp: int>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "messageMimeType" $messageMimeType "scalar") (serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/changelog/organization/($organizationId)/" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create collection
+#
+# POST /api/v1/collections
+# operationId: createCollection
+export def "collections createCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --label: string
+  length: int # format: int32
+  organizationId: string # e.g. de.acme
+  type: string@type-completer
+]: any -> record<id4n: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/collections")
+  let body = {label: $label, length: $length, organizationId: $organizationId, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete collection
+#
+# DELETE /api/v1/collections/{id4n}
+# operationId: deleteCollection
+export def "collections delete" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Find collection
+#
+# GET /api/v1/collections/{id4n}
+# operationId: findCollection
+export def "collections findCollection" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update collection
+#
+# PATCH /api/v1/collections/{id4n}
+# operationId: updateCollection
+export def "collections updateCollection" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --holderOrganizationId: string # Organization namespace of the holder of the collection
+  --label: string
+  --physicalState: string@physicalState-completer # Physical attachment state of the collection
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)")
+  let body = {holderOrganizationId: $holderOrganizationId, label: $label, physicalState: $physicalState} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove elements from collection
+#
+# DELETE /api/v1/collections/{id4n}/elements
+# operationId: removeElementsFromCollection
+export def "collections-elements removeElementsFromCollection" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --id4ns: list # A list of id4ns.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)/elements")
+  let body = {id4ns: $id4ns} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List contents of the collection
+#
+# GET /api/v1/collections/{id4n}/elements
+# operationId: listElementsOfCollection
+export def "collections-elements listElementsOfCollection" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+  --organizationId: string # The organization namespace.
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)/elements" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add elements to collection
+#
+# POST /api/v1/collections/{id4n}/elements
+# operationId: addElementsToCollection
+export def "collections-elements addElementsToCollection" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --id4ns: list # A list of id4ns.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/collections/($id4n)/elements")
+  let body = {id4ns: $id4ns} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List countries
+#
+# GET /api/v1/countries
+# operationId: listCountries
+export def "countries listCountries" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<code: string, name: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/countries" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List documents
+#
+# GET /api/v1/documents/{id4n}
+# operationId: listAllDocuments
+export def "documents listAllDocuments" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --owner: string # Filter by owner organization
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "owner" $owner "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List organization specific documents
+#
+# GET /api/v1/documents/{id4n}/{organizationId}
+# operationId: listDocuments
+export def "documents listDocuments" [
+  organizationId: string
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --owner: string # Filter by owner organization
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "owner" $owner "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create an document for an id4n
+#
+# POST /api/v1/documents/{id4n}/{organizationId}
+# operationId: createDocument
+export def "documents createDocument" [
+  organizationId: string
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  content: string # content (format: binary)
+]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)")
+  let body = {content: $content} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Put an document for an id4n
+#
+# PUT /api/v1/documents/{id4n}/{organizationId}
+# operationId: putDocument
+export def "documents put" [
+  organizationId: string
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  content: string # content (format: binary)
+]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)")
+  let body = {content: $content} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Delete a document
+#
+# DELETE /api/v1/documents/{id4n}/{organizationId}/{fileName}
+# operationId: deleteDocument
+export def "documents delete" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)/($fileName)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Read document contents
+#
+# GET /api/v1/documents/{id4n}/{organizationId}/{fileName}
+# operationId: readDocument
+export def "documents readDocument" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)/($fileName)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve a document (meta-data only, no content)
+#
+# GET /api/v1/documents/{id4n}/{organizationId}/{fileName}/metadata
+# operationId: getDocument
+export def "documents-metadata get" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)/($fileName)/metadata")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update a document
+#
+# PATCH /api/v1/documents/{id4n}/{organizationId}/{fileName}/metadata
+# operationId: updateDocumentMetadata
+# --visibility shape: {public?: bool, sharedWithOrganizationIds?: list}
+export def "documents-metadata updateDocumentMetadata" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --filename: string # File Name (e.g. publicInfo.pdf)
+  --mimeType: string # Mime Type (e.g. text/plain)
+  --visibility: record # shape: {public?: bool, sharedWithOrganizationIds?: list}
+]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/documents/($id4n)/($organizationId)/($fileName)/metadata")
+  let body = {filename: $filename, mimeType: $mimeType, visibility: $visibility} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Create GUID(s)
+#
+# POST /api/v1/guids
+# operationId: createGuid
+export def "guids createGuid" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  count: int # The total number of GUIDs to create (format: int32, e.g. 1)
+  length: int # The charactersequence length of the GUID (format: int32, e.g. 40)
+  organizationId: string # The namespace of the organization where the generated GUIDs should be assigned. (e.g. de.acme)
+]: any -> record<id4ns: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/guids")
+  let body = {count: $count, length: $length, organizationId: $organizationId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve GUIDs not in any collection
+#
+# GET /api/v1/guids/withoutCollection
+# operationId: getGuidsWithoutCollection
+export def "guids-without-collection get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The namespace of the organization to search GUIDs for
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/guids/withoutCollection" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve GUID information
+#
+# GET /api/v1/guids/{id4n}
+# operationId: getGuid
+export def "guids get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The organization namespace to resolve.
+]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/guids/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Change GUID information.
+#
+# PATCH /api/v1/guids/{id4n}
+# operationId: updateGuid
+export def "guids updateGuid" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --physicalState: string@physicalState-completer # Physical attachment state of the GUID
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/guids/($id4n)")
+  let body = {physicalState: $physicalState} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List history
+#
+# GET /api/v1/history/{id4n}
+# operationId: filteredList
+export def "history filteredList" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --includePrivate: oneof<nothing, bool> # Also return private history entries (default: true)
+  --organization: string # Show only entries created by one of the given organizations. This parameter can be used multiple times.
+  --type: list@type-completer-1 # Show only entries matching one of the given history item types. This parameter can be used multiple times.
+  --qualifier: list # Show only entries matching one of the given history item qualifiers (additional property de.id4i.history.item.qualifier). This parameter can be used multiple times.
+  --fromDate: string # From date time as UTC Date-Time format (format: date-time)
+  --toDate: string # To date time as UTC Date-Time format (format: date-time)
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "includePrivate" $includePrivate "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "type" $type "multi") (serialize-qp "qualifier" $qualifier "multi") (serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/history/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add history item
+#
+# POST /api/v1/history/{id4n}
+# operationId: addItem
+# --visibility shape: {public?: bool, sharedOrganizationIds?: list}
+export def "history addItem" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --additionalProperties: record # History items custom additional properties
+  organizationId: string # Originator of the history item (e.g. org.acme)
+  type: string@type-completer-1 # Type of the history item (e.g. DISPATCHED)
+  --visibility: record # shape: {public?: bool, sharedOrganizationIds?: list}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/history/($id4n)")
+  let body = {additionalProperties: $additionalProperties, organizationId: $organizationId, type: $type, visibility: $visibility} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# DEPRECATED - List history
+#
+# GET /api/v1/history/{id4n}/{organizationId}
+# DEPRECATED
+# operationId: list
+@deprecated
+export def "history list" [
+  id4n: string
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --includePrivate: oneof<nothing, bool> # Also return private history entries (default: true)
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "includePrivate" $includePrivate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/history/($id4n)/($organizationId)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get history item
+#
+# GET /api/v1/history/{id4n}/{organizationId}/{sequenceId}
+# operationId: retrieveItem
+export def "history retrieveItem" [
+  id4n: string
+  organizationId: string
+  sequenceId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/history/($id4n)/($organizationId)/($sequenceId)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update history item
+#
+# PATCH /api/v1/history/{id4n}/{organizationId}/{sequenceId}
+# operationId: updateItem
+# --visibility shape: {public?: bool, sharedOrganizationIds?: list}
+export def "history updateItem" [
+  id4n: string
+  organizationId: string
+  sequenceId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --body-organizationId: string # New organization id displayed for this item. If given, must match the holder of GUID and the organization the history item is found under. (e.g. de.acme)
+  --visibility: record # shape: {public?: bool, sharedOrganizationIds?: list}
+]: any -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/history/($id4n)/($organizationId)/($sequenceId)")
+  let body = {organizationId: $body_organizationId, visibility: $visibility} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Set history item visibility
+#
+# PUT /api/v1/history/{id4n}/{organizationId}/{sequenceId}/visibility
+# operationId: updateItemVisibility
+export def "history-visibility updateItemVisibility" [
+  id4n: string
+  organizationId: string
+  sequenceId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --public: oneof<nothing, bool> # Document is publicly readable (if ID4N is owned by the same organization) (e.g. true)
+  --sharedOrganizationIds: list # Document is readable by these organizations (independend of ID4N ownership) (e.g. [de.acme, com.porsche, de.bluerain])
+]: any -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/history/($id4n)/($organizationId)/($sequenceId)/visibility")
+  let body = {public: $public, sharedOrganizationIds: $sharedOrganizationIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve ID4n information
+#
+# GET /api/v1/id4ns/{id4n}
+# operationId: getId4n
+export def "id4ns get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The organization namespace to resolve.
+]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all aliases for the given GUID or Collection.
+#
+# GET /api/v1/id4ns/{id4n}/alias
+# operationId: getGuidAliases
+export def "id4ns-alias get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/alias")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Remove aliases from GUID or Collection
+#
+# DELETE /api/v1/id4ns/{id4n}/alias/{aliasType}
+# operationId: removeGuidAlias
+export def "id4ns-alias removeGuidAlias" [
+  id4n: string
+  aliasType: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/alias/($aliasType)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add alias for GUID or Collection
+#
+# POST /api/v1/id4ns/{id4n}/alias/{aliasType}
+# operationId: addGuidAlias
+export def "id4ns-alias addGuidAlias" [
+  id4n: string
+  aliasType: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  alias: string # An alias (e.g. alias)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/alias/($aliasType)")
+  let body = {alias: $alias} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve collections of an ID
+#
+# GET /api/v1/id4ns/{id4n}/collections
+# operationId: getCollections
+export def "id4ns-collections get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The organization holding the collections.
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/collections" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete ID4n properties
+#
+# DELETE /api/v1/id4ns/{id4n}/properties
+# operationId: deleteProperties
+export def "id4ns-properties delete" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --organizationId: string # The organization namespace to work on while deleting the properties.
+  --body: record
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/properties" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve ID4n properties
+#
+# GET /api/v1/id4ns/{id4n}/properties
+# operationId: getProperties
+export def "id4ns-properties get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # The organization namespace.
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/properties" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patch ID4n properties
+#
+# PATCH /api/v1/id4ns/{id4n}/properties
+# operationId: patchProperties
+export def "id4ns-properties patch" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --organizationId: string # The organization namespace to work on while patching the properties.
+  --body: record
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/id4ns/($id4n)/properties" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Import GS1/MAPP codes
+#
+# POST /api/v1/import/gs1
+# operationId: importGS1Codes
+# --listOfGS1s shape: {codes?: list}
+export def "import-gs1 importGS1Codes" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  listOfGS1s: record # A list of GS1/MAPP codes — shape: {codes?: list}
+  organizationId: string # The organization where the GS1/Mapp code is imported. (e.g. de.acme)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/import/gs1")
+  let body = {listOfGS1s: $listOfGS1s, organizationId: $organizationId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve version information about ID4i
+#
+# GET /api/v1/info
+# operationId: applicationInfo
+export def "info applicationInfo" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<branch: string, commitTime: string, name: string, productionMode: bool, revision: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/info")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Read data from microstorage
+#
+# GET /api/v1/microstorage/{id4n}/{organization}
+# operationId: readFromMicrostorage
+export def "microstorage readFromMicrostorage" [
+  organization: string
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/microstorage/($id4n)/($organization)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Write data to microstorage
+#
+# PUT /api/v1/microstorage/{id4n}/{organization}
+# operationId: writeToMicrostorage
+export def "microstorage writeToMicrostorage" [
+  organization: string
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --Content-Type: string # Content-Type
+  --Content-Length: int # Content-Length
+  --body: record
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/microstorage/($id4n)/($organization)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Content-Type": $Content_Type, "Content-Length": $Content_Length} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+}
+
+# Get multiple ID4n properties
+#
+# GET /api/v1/multiple/id4ns/properties
+# operationId: getMultipleProperties
+export def "multiple-id4ns-properties get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --id4ns: list # The list of ID4ns to resolve.
+  --organizationId: string # The organization namespace.
+]: nothing -> record<list: table<id4n: string, properties: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "id4ns" $id4ns "multi") (serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/multiple/id4ns/properties" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create organization
+#
+# POST /api/v1/organizations
+# operationId: createOrganization
+export def "organizations createOrganization" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  name: string # The name of the organization (e.g. ACME Inc.)
+  namespace: string # The namespace of the organization (e.g. de.acme)
+]: any -> record<id: int, logoURL: string, name: string, namespace: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/organizations")
+  let body = {name: $name, namespace: $namespace} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete organization
+#
+# DELETE /api/v1/organizations/{organizationId}
+# operationId: deleteOrganization
+export def "organizations delete" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Find organization by id/namespace
+#
+# GET /api/v1/organizations/{organizationId}
+# operationId: findOrganization
+export def "organizations findOrganization" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<id: int, logoURL: string, name: string, namespace: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update organization
+#
+# PUT /api/v1/organizations/{organizationId}
+# operationId: updateOrganization
+export def "organizations updateOrganization" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --name: string # The name of the organization (e.g. ACME Inc.)
+]: any -> record<id: int, logoURL: string, name: string, namespace: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)")
+  let body = {name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove billing address
+#
+# DELETE /api/v1/organizations/{organizationId}/addresses/billing
+# operationId: deleteOrganizationBillingAddress
+export def "organizations-addresses-billing delete" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/addresses/billing")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve billing address
+#
+# GET /api/v1/organizations/{organizationId}/addresses/billing
+# operationId: findOrganizationBillingAddress
+export def "organizations-addresses-billing findOrganizationBillingAddress" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/addresses/billing")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Store billing address
+#
+# PUT /api/v1/organizations/{organizationId}/addresses/billing
+# operationId: updateOrganizationBillingAddress
+export def "organizations-addresses-billing updateOrganizationBillingAddress" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  city: string # e.g. MyCity
+  --companyName: string # e.g. ACME Inc.
+  countryCode: string # The ISO 3166 two-letter country code (e.g. DE)
+  firstname: string # e.g. Max
+  lastname: string # e.g. Muster
+  postCode: string # e.g. 12345
+  street: string # e.g. Examplestreet 1
+  --telephone: string # The telephone number e.g. (e.g. +49 8088 12345)
+]: any -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/addresses/billing")
+  let body = {city: $city, companyName: $companyName, countryCode: $countryCode, firstname: $firstname, lastname: $lastname, postCode: $postCode, street: $street, telephone: $telephone} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve address
+#
+# GET /api/v1/organizations/{organizationId}/addresses/default
+# operationId: findOrganizationAddress
+export def "organizations-addresses-default findOrganizationAddress" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/addresses/default")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Store address
+#
+# PUT /api/v1/organizations/{organizationId}/addresses/default
+# operationId: updateOrganizationAddress
+export def "organizations-addresses-default updateOrganizationAddress" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  city: string # e.g. MyCity
+  --companyName: string # e.g. ACME Inc.
+  countryCode: string # The ISO 3166 two-letter country code (e.g. DE)
+  firstname: string # e.g. Max
+  lastname: string # e.g. Muster
+  postCode: string # e.g. 12345
+  street: string # e.g. Examplestreet 1
+  --telephone: string # The telephone number e.g. (e.g. +49 8088 12345)
+]: any -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/addresses/default")
+  let body = {city: $city, companyName: $companyName, countryCode: $countryCode, firstname: $firstname, lastname: $lastname, postCode: $postCode, street: $street, telephone: $telephone} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get collections of organization
+#
+# GET /api/v1/organizations/{organizationId}/collections
+# operationId: getAllCollectionsOfOrganization
+export def "organizations-collections get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+  --type: string@type-completer # Filter by this type
+  --label: string # Filter by this label
+  --labelPrefix: string # Filter by this label prefix
+  --property: list # List of i4dn property filter. e.g. "com.myorga.state:IN:waiting|processing" or "com.myorga.orderId:EQ:SAP001"
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "labelPrefix" $labelPrefix "scalar") (serialize-qp "property" $property "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/collections" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete organization logo
+#
+# DELETE /api/v1/organizations/{organizationId}/logo
+# operationId: deleteOrganizationLogo
+export def "organizations-logo delete" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/logo")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update organization logo
+#
+# POST /api/v1/organizations/{organizationId}/logo
+# operationId: setOrganizationLogo
+export def "organizations-logo setOrganizationLogo" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  file: string # An image containing the new logo. (format: binary)
+]: any -> record<uri: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/logo")
+  let body = {file: $file} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# GET /api/v1/organizations/{organizationId}/messaging
+#
+# operationId: getDefaultQueue
+export def "organizations-messaging get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<active: bool, id: string, waitingMessages: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/messaging")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# PATCH /api/v1/organizations/{organizationId}/messaging
+#
+# operationId: patchDefaultQueue
+export def "organizations-messaging patch" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --active: oneof<nothing, bool> # If this value is set to false the queue will be deleted. (e.g. true)
+  --id: string # e.g. <default>
+  --purgeQueue: oneof<nothing, bool> # Set this value to true if you want to purge the queue. (e.g. false)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/messaging")
+  let body = {active: $active, id: $id, purgeQueue: $purgeQueue} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Enqueue a custom message
+#
+# POST /api/v1/organizations/{organizationId}/messaging/enqueueCustomMessage
+# operationId: enqueueCustomMessage
+export def "organizations-messaging-enqueue-custom-message enqueueCustomMessage" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  data: record # Custom data in a map. You may use JSON content (e.g. x = y)
+  name: string # The name of the message (organisation specific) (e.g. <event name>)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/messaging/enqueueCustomMessage")
+  let body = {data: $data, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove partner
+#
+# DELETE /api/v1/organizations/{organizationId}/partner
+# operationId: removePartnerOrganization
+export def "organizations-partner removePartnerOrganization" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-organizationId: string # The namespace of the partner organization to remove (e.g. org.acme)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/partner")
+  let body = {organizationId: $body_organizationId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get partners of an organization
+#
+# GET /api/v1/organizations/{organizationId}/partner
+# operationId: getPartnerOrganizations
+export def "organizations-partner get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/partner" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add partner
+#
+# PUT /api/v1/organizations/{organizationId}/partner
+# operationId: addPartnerOrganization
+export def "organizations-partner addPartnerOrganization" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-organizationId: string # The namespace of the partner organization to add (e.g. org.acme)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/partner")
+  let body = {organizationId: $body_organizationId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List my privileges
+#
+# GET /api/v1/organizations/{organizationId}/privileges
+# operationId: getOrganizationPrivileges
+export def "organizations-privileges get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> list<string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/privileges")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List users and their roles
+#
+# GET /api/v1/organizations/{organizationId}/roles
+# operationId: getAllOrganizationRoles
+export def "organizations-roles get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<roles: list, user: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/roles" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Find users in organization
+#
+# GET /api/v1/organizations/{organizationId}/users
+# operationId: getUsersOfOrganization
+export def "organizations-users get" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<id: string, name: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/users" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Invite Users
+#
+# POST /api/v1/organizations/{organizationId}/users/invite
+# operationId: inviteUsers
+# --invitations item shape: {email?: string, roles: list, userName?: string}
+export def "organizations-users-invite inviteUsers" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  invitations: list # item shape: {email?: string, roles: list, userName?: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/users/invite")
+  let body = {invitations: $invitations} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Remove role(s) from user
+#
+# DELETE /api/v1/organizations/{organizationId}/users/{username}/roles
+# operationId: removeUserRoles
+export def "organizations-users-roles removeUserRoles" [
+  organizationId: string
+  username: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --roles: list
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/users/($username)/roles")
+  let body = {roles: $roles} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get user roles by username
+#
+# GET /api/v1/organizations/{organizationId}/users/{username}/roles
+# operationId: getUserRoles
+export def "organizations-users-roles get" [
+  organizationId: string
+  username: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: list<string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/users/($username)/roles" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add role(s) to user
+#
+# POST /api/v1/organizations/{organizationId}/users/{username}/roles
+# operationId: addUserRoles
+export def "organizations-users-roles addUserRoles" [
+  organizationId: string
+  username: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --roles: list
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organizations/($organizationId)/users/($username)/roles")
+  let body = {roles: $roles} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List public documents
+#
+# GET /api/v1/public/documents/{id4n}
+# operationId: listAllPublicDocuments
+export def "public-documents listAllPublicDocuments" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # organizationId
+  --owner: string # Filter by owner organization
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/public/documents/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Read public document contents
+#
+# GET /api/v1/public/documents/{id4n}/{organizationId}/{fileName}
+# operationId: readPublicDocument
+export def "public-documents readPublicDocument" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/public/documents/($id4n)/($organizationId)/($fileName)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve a public document (meta-data only, no content)
+#
+# GET /api/v1/public/documents/{id4n}/{organizationId}/{fileName}/metadata
+# operationId: getPublicDocument
+export def "public-documents-metadata get" [
+  organizationId: string
+  id4n: string
+  fileName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/public/documents/($id4n)/($organizationId)/($fileName)/metadata")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Shows the public history of the given GUID
+#
+# GET /api/v1/public/history/{id4n}
+# operationId: listPublicHistory
+export def "public-history listPublicHistory" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/public/history/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Resolve image
+#
+# GET /api/v1/public/image/{imageID}
+# operationId: resolveImageUsingGET
+export def "public-image resolveImageUsingGET" [
+  imageID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/public/image/($imageID)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Read public organization information
+#
+# GET /api/v1/public/organizations/{organizationId}
+# operationId: readOrganizationInfo
+export def "public-organizations readOrganizationInfo" [
+  organizationId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<id: int, logoURL: string, name: string, namespace: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/public/organizations/($organizationId)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve all public routes for a GUID
+#
+# GET /api/v1/public/routes/{id4n}
+# operationId: getRoutes
+export def "public-routes get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --type: string # type (default: web)
+  --interpolate: oneof<nothing, bool> # interpolate (default: true)
+]: nothing -> table<params: record, priority: int, public: bool, type: string, validUntil: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "interpolate" $interpolate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/public/routes/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List roles
+#
+# GET /api/v1/roles
+# operationId: listAllRoles
+export def "roles listAllRoles" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --privilege: string # If specified the roles will be filtered containing that privilege.
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<name: string, privileges: list>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "privilege" $privilege "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/roles" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve routing file
+#
+# GET /api/v1/routingfiles/{id4n}
+# operationId: getRoutingFile
+export def "routingfiles get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # organizationId
+]: nothing -> record<options: record<deleteOutdatedRoutes: bool>, routes: table<params: record, priority: int, public: bool, type: string, validUntil: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/routingfiles/($id4n)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Store routing file
+#
+# PUT /api/v1/routingfiles/{id4n}
+# operationId: updateRoutingFile
+# --routing shape: {options?: record, routes: list}
+export def "routingfiles updateRoutingFile" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --organizationId: string
+  routing: record # shape: {options?: record, routes: list}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/routingfiles/($id4n)")
+  let body = {organizationId: $organizationId, routing: $routing} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve current route of a GUID (or ID4N)
+#
+# GET /api/v1/routingfiles/{id4n}/route/{type}
+# operationId: getRoute
+export def "routingfiles-route get" [
+  id4n: string
+  type: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --privateRoutes: oneof<nothing, bool> # privateRoutes (default: true)
+  --publicRoutes: oneof<nothing, bool> # publicRoutes (default: true)
+  --interpolate: oneof<nothing, bool> # interpolate (default: true)
+]: nothing -> record<params: record, priority: int, public: bool, type: string, validUntil: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "privateRoutes" $privateRoutes "scalar") (serialize-qp "publicRoutes" $publicRoutes "scalar") (serialize-qp "interpolate" $interpolate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/routingfiles/($id4n)/route/($type)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve all routes of a GUID (or ID4N)
+#
+# GET /api/v1/routingfiles/{id4n}/routes/{type}
+# operationId: getAllRoutes
+export def "routingfiles-routes get" [
+  id4n: string
+  type: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --organizationId: string # organizationId
+  --interpolate: oneof<nothing, bool> # interpolate (default: true)
+]: nothing -> table<params: record, priority: int, public: bool, type: string, validUntil: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "interpolate" $interpolate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v1/routingfiles/($id4n)/routes/($type)" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Search for GUIDs by alias
+#
+# GET /api/v1/search/guids
+# operationId: searchByAlias
+export def "search-guids searchByAlias" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --alias: string # The alias to search for
+  --aliasType: string@aliasType-completer # Alias type type to search for
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "aliasType" $aliasType "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/search/guids" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all supported alias types
+#
+# GET /api/v1/search/guids/aliases/types
+# operationId: getGuidAliasTypes
+export def "search-guids-aliases-types get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> list<string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v1/search/guids/aliases/types")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Transfer a GUID or collection, obtaining it (i.e. becoming the holder) and if allowed also taking ownership
+#
+# PUT /api/v1/transfers/{id4n}/receiveInfo
+# operationId: receive
+export def "transfers-receive-info receive" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  organizationId: string # Organization to take the ownership of the ID. If the sender chose to keep the ownership, this organization becomes the holder. Otherwise, it becomes the new owner. (e.g. de.id4i)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/transfers/($id4n)/receiveInfo")
+  let body = {organizationId: $organizationId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Show transfer preparation information
+#
+# GET /api/v1/transfers/{id4n}/sendInfo
+# operationId: getSendInfo
+export def "transfers-send-info get" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<holderOrganizationId: string, keepOwnership: bool, openForClaims: bool, ownerOrganizationId: string, recipientOrganizationIds: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/transfers/($id4n)/sendInfo")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Prepare an object for transfer
+#
+# PUT /api/v1/transfers/{id4n}/sendInfo
+# operationId: prepare
+export def "transfers-send-info prepare" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --keepOwnership: oneof<nothing, bool> # Keep the public ownership while transferring the object (e.g. true)
+  --openForClaims: oneof<nothing, bool> # Allow anyone who knows (or can scan) the ID4N to claim ownership of this object (e.g. false)
+  recipientOrganizationIds: list # Allow only these organizations to obtain this object (e.g. [de.acme, com.porsche, de.bluerain])
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/transfers/($id4n)/sendInfo")
+  let body = {keepOwnership: $keepOwnership, openForClaims: $openForClaims, recipientOrganizationIds: $recipientOrganizationIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieve organizations of user
+#
+# GET /api/v1/user/organizations
+# operationId: getOrganizationsOfUser
+export def "user-organizations get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --role: string # role
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<id: int, logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/user/organizations" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Find users
+#
+# GET /api/v1/users
+# operationId: findUsers
+export def "users findUsers" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --usernamePrefix: string
+  --offset: int # Start with the n-th element (format: int32)
+  --limit: int # The maximum count of returned elements (format: int32)
+]: nothing -> record<elements: table<id: string, name: string>, limit: int, offset: int, total: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "usernamePrefix" $usernamePrefix "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/api/v1/users" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Find by username
+#
+# GET /api/v1/users/{username}
+# operationId: findUserByUsername
+export def "users findUserByUsername" [
+  username: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<id: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/users/($username)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Forward
+#
+# GET /go/{guid}
+# operationId: go
+export def "go go" [
+  guid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/go/($guid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# ID4i API Login
+#
+# POST /login
+# operationId: login
+export def "login login" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --login: string
+  --password: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/login")
+  let body = {login: $login, password: $password} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Resolve owner of id4n
+#
+# GET /whois/{id4n}
+# operationId: resolveWhoIsEntry
+export def "whois resolveWhoIsEntry" [
+  id4n: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<aliases: record, organization: record<id: int, logoURL: string, name: string, namespace: string>, organizationAddress: record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/whois/($id4n)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

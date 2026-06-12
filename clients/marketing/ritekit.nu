@@ -1,0 +1,419 @@
+# Auto-generated client for RiteKit API v1.0.0
+# Source: https://api.apis.guru/v2/specs/ritekit.com/1.0.0/openapi.json
+# Auth: --token flag or $env.RITEKIT_API_TOKEN
+
+const BASE_URL = "https://api.ritekit.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o RITEKIT_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://api.ritekit.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "emoji-auto-emojify Auto-Emojify" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Auto-Emojify
+#
+# GET /v1/emoji/auto-emojify
+# operationId: Auto-Emojify
+export def "emoji-auto-emojify Auto-Emojify" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --text: string # Text of the post (e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/emoji/auto-emojify" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Emoji Suggestions
+#
+# GET /v1/emoji/suggestions
+# operationId: Emoji Suggestions
+export def "emoji-suggestions Emoji-Suggestions" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --text: string # Text of the post (e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/emoji/suggestions" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Animate Image
+#
+# GET /v1/images/animate
+# operationId: Animate Image
+export def "images-animate Animate-Image" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-url: string # URL of the company (e.g. https://jpeg.org/images/jpeg-home.jpg)
+  --type: string # URL of the company (e.g. glint)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/images/animate" $qp)
+  let accept_val = "image/gif"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Company Logo
+#
+# GET /v1/images/logo
+# operationId: Company Logo
+export def "images-logo Company-Logo" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --domain: string # URL of the company (e.g. google.com)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/images/logo" $qp)
+  let accept_val = "image/png"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Text to Image
+#
+# GET /v1/images/quote
+# operationId: Text to Image
+export def "images-quote Text-to-Image" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --quote: string # Text of the quote (e.g. If you love life, don't waste time, for time is what life is made up of)
+  --author: string # Name of the author/source (e.g. Bruce Lee)
+  --fontSize: int # Font size for the quote (author font size is calculated automatically) (e.g. 60)
+  --quoteFont: string # Font-family used for quote text (e.g. Lora)
+  --quoteFontColor: string # Font color of the quote text (e.g. #4f4f4f)
+  --authorFont: string # Font-family used for author name (e.g. Lato Black)
+  --authorFontColor: string # Font color of the author (e.g. #e5e5e5)
+  --enableHighlight: int # Enable highlight on quote text (e.g. 1)
+  --highlightColor: string # Color used for highlight (e.g. #f0ea66)
+  --bgType: string # Background type (gradient/solid) (e.g. gradient)
+  --backgroundColor: string # Background color for solid background type (e.g. #000000)
+  --gradientType: string # Type of gradient background (linear/radial) (e.g. linear)
+  --gradientColor1: string # First color for gradient background type (e.g. #1ee691)
+  --gradientColor2: string # Second color for gradient background type (e.g. #1ddad6)
+  --brandLogo: string # URL of the brand logo (e.g. https://cdn.ritekit.com/assets/img/common/made-with-ritekit-white.png)
+  --animation: string # Animation type: none, rays, glint, circle (e.g. glint)
+  --showQuoteMark: int # showing/hiding quote mark
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "fontSize" $fontSize "scalar") (serialize-qp "quoteFont" $quoteFont "scalar") (serialize-qp "quoteFontColor" $quoteFontColor "scalar") (serialize-qp "authorFont" $authorFont "scalar") (serialize-qp "authorFontColor" $authorFontColor "scalar") (serialize-qp "enableHighlight" $enableHighlight "scalar") (serialize-qp "highlightColor" $highlightColor "scalar") (serialize-qp "bgType" $bgType "scalar") (serialize-qp "backgroundColor" $backgroundColor "scalar") (serialize-qp "gradientType" $gradientType "scalar") (serialize-qp "gradientColor1" $gradientColor1 "scalar") (serialize-qp "gradientColor2" $gradientColor2 "scalar") (serialize-qp "brandLogo" $brandLogo "scalar") (serialize-qp "animation" $animation "scalar") (serialize-qp "showQuoteMark" $showQuoteMark "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/images/quote" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List of CTAs
+#
+# GET /v1/link/cta
+# operationId: List of CTAs
+export def "link-cta List-of-CTAs" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v1/link/cta")
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Shorten Link
+#
+# GET /v1/link/short-link
+# operationId: Shorten Link
+export def "link-short-link Shorten-Link" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-url: string # URL (e.g. https://ritekit.com)
+  --cta: int # cta id (e.g. 6530)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "cta" $cta "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/link/short-link" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Trending Hashtags
+#
+# GET /v1/search/trending
+# operationId: Trending Hashtags
+export def "search-trending Trending-Hashtags" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --green: oneof<nothing, bool> # Restrict results only to green hashtags. Hides overused (red) hashtags. (default: 1)
+  --latin: oneof<nothing, bool> # Restrict results only to hashtags with latin characters (default: 1)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "green" $green "scalar") (serialize-qp "latin" $latin "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/search/trending" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Auto-Hashtag
+#
+# GET /v1/stats/auto-hashtag
+# operationId: Auto-Hashtag
+export def "stats-auto-hashtag Auto-Hashtag" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --post: string # Text of the post (e.g. Is artificial intelligence the future of customer service?)
+  --maxHashtags: int # Max number of hashtags. (default: 2)
+  --hashtagPosition: string # Position of hashtags: end => at the end, auto => anywhere (default: auto)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "maxHashtags" $maxHashtags "scalar") (serialize-qp "hashtagPosition" $hashtagPosition "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/stats/auto-hashtag" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Hashtag Suggestions
+#
+# GET /v1/stats/hashtag-suggestions
+# operationId: Hashtag Suggestions
+export def "stats-hashtag-suggestions Hashtag-Suggestions" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --text: string # Topic (e.g. seo)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/stats/hashtag-suggestions" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Hashtag History
+#
+# GET /v1/stats/history/{hashtag}
+# operationId: Hashtag History
+export def "stats-history Hashtag-History" [
+  hashtag: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/stats/history/($hashtag)")
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Hashtag Stats
+#
+# GET /v1/stats/multiple-hashtags
+# operationId: Hashtag Stats
+export def "stats-multiple-hashtags Hashtag-Stats" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --tags: list # Hashtag(s) without # mark (e.g. jobs,hello)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "tags" $tags "csv")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/stats/multiple-hashtags" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Hashtags cleaner
+#
+# GET /v2/instagram/hashtags-cleaner
+# operationId: Hashtags cleaner
+export def "instagram-hashtags-cleaner Hashtags-cleaner" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --post: string # post (e.g. #instaphotography #instabeauty #instagirls #instanature #instagirl #photography #beauty #girls #nature #girl #sky #water #lady #ladies #woman #women #photograph #photographs #beauties #sunlight #sitting #waters #skies #sit #photographies)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "post" $post "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/instagram/hashtags-cleaner" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

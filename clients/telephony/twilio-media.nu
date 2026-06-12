@@ -1,0 +1,437 @@
+# Auto-generated client for Twilio - Media v1.42.0
+# Source: https://api.apis.guru/v2/specs/twilio.com/twilio_media_v1/1.42.0/openapi.json
+# Auth: --token flag or $env.TWILIO_MEDIA_TOKEN
+
+const BASE_URL = "https://media.twilio.com"
+const DEFAULT_AUTH = "basic"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_MEDIA_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://media.twilio.com"] }
+def auth-scheme-completer [] { ["basic"] }
+
+# Completers for enum parameters
+def Order-completer [] { ["asc" "desc"] }
+def Status-completer [] { ["ended" "failed" "started"] }
+def StatusCallbackMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
+def Status-completer-1 [] { ["ended"] }
+def Status-completer-2 [] { ["completed" "deleted" "failed" "processing"] }
+def Status-completer-3 [] { ["created" "ended" "failed" "started"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media-processors ListMediaProcessor" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Returns a list of MediaProcessors.
+#
+# GET /v1/MediaProcessors
+# operationId: ListMediaProcessor
+export def "media-processors ListMediaProcessor" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Order: string@Order-completer # The sort order of the list by `date_created`. Can be: `asc` (ascending) or `desc` (descending) with `desc` as the default.
+  --Status: string@Status-completer # Status to filter by, with possible values `started`, `ended` or `failed`.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<media_processors: table<account_sid: string, date_created: string, date_updated: string, ended_reason: string, extension: string, extension_context: string, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/MediaProcessors" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/MediaProcessors
+#
+# operationId: CreateMediaProcessor
+export def "media-processors CreateMediaProcessor" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  Extension: string # The [Media Extension](/docs/live/api/media-extensions-overview) name or URL. Ex: `video-composer-v2`
+  ExtensionContext: string # The context of the Media Extension, represented as a JSON dictionary. See the documentation for the specific [Media Extension](/docs/live/api/media-extensions-overview) you are using for more information about the context to send.
+  --ExtensionEnvironment: any # User-defined environment variables for the Media Extension, represented as a JSON dictionary of key/value strings. See the documentation for the specific [Media Extension](/docs/live/api/media-extensions-overview) you are using for more information about whether you need to provide this.
+  --MaxDuration: int # The maximum time, in seconds, that the MediaProcessor can run before automatically ends. The default value is 300 seconds, and the maximum value is 90000 seconds. Once this maximum duration is reached, Twilio will end the MediaProcessor, regardless of whether media is still streaming.
+  --StatusCallback: string # The URL to which Twilio will send asynchronous webhook requests for every MediaProcessor event. See [Status Callbacks](/docs/live/status-callbacks) for details. (format: uri)
+  --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method Twilio should use to call the `status_callback` URL. Can be `POST` or `GET` and the default is `POST`. (format: http-method)
+]: any -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, extension: string, extension_context: string, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base "/v1/MediaProcessors")
+  let body = {Extension: $Extension, ExtensionContext: $ExtensionContext, ExtensionEnvironment: $ExtensionEnvironment, MaxDuration: $MaxDuration, StatusCallback: $StatusCallback, StatusCallbackMethod: $StatusCallbackMethod} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Returns a single MediaProcessor resource identified by a SID.
+#
+# GET /v1/MediaProcessors/{Sid}
+# operationId: FetchMediaProcessor
+export def "media-processors FetchMediaProcessor" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, extension: string, extension_context: string, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/MediaProcessors/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a MediaProcessor resource identified by a SID.
+#
+# POST /v1/MediaProcessors/{Sid}
+# operationId: UpdateMediaProcessor
+export def "media-processors UpdateMediaProcessor" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  Status: string@Status-completer-1
+]: any -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, extension: string, extension_context: string, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/MediaProcessors/($Sid)")
+  let body = {Status: $Status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Returns a list of MediaRecordings.
+#
+# GET /v1/MediaRecordings
+# operationId: ListMediaRecording
+export def "media-recordings ListMediaRecording" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Order: string@Order-completer # The sort order of the list by `date_created`. Can be: `asc` (ascending) or `desc` (descending) with `desc` as the default.
+  --Status: string@Status-completer-2 # Status to filter by, with possible values `processing`, `completed`, `deleted`, or `failed`.
+  --ProcessorSid: string # SID of a MediaProcessor to filter by.
+  --SourceSid: string # SID of a MediaRecording source to filter by.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<media_recordings: table<account_sid: string, date_created: string, date_updated: string, duration: int, format: string, links: record, media_size: int, processor_sid: string, resolution: string, sid: string, source_sid: string, status: string, status_callback: string, status_callback_method: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "ProcessorSid" $ProcessorSid "scalar") (serialize-qp "SourceSid" $SourceSid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/MediaRecordings" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a MediaRecording resource identified by a SID.
+#
+# DELETE /v1/MediaRecordings/{Sid}
+# operationId: DeleteMediaRecording
+export def "media-recordings DeleteMediaRecording" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/MediaRecordings/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a single MediaRecording resource identified by a SID.
+#
+# GET /v1/MediaRecordings/{Sid}
+# operationId: FetchMediaRecording
+export def "media-recordings FetchMediaRecording" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, duration: int, format: string, links: record, media_size: int, processor_sid: string, resolution: string, sid: string, source_sid: string, status: string, status_callback: string, status_callback_method: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/MediaRecordings/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns a list of PlayerStreamers.
+#
+# GET /v1/PlayerStreamers
+# operationId: ListPlayerStreamer
+export def "player-streamers ListPlayerStreamer" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Order: string@Order-completer # The sort order of the list by `date_created`. Can be: `asc` (ascending) or `desc` (descending) with `desc` as the default.
+  --Status: string@Status-completer-3 # Status to filter by, with possible values `created`, `started`, `ended`, or `failed`.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, player_streamers: table<account_sid: string, date_created: string, date_updated: string, ended_reason: string, links: record, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string, video: bool>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/PlayerStreamers" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/PlayerStreamers
+#
+# operationId: CreatePlayerStreamer
+export def "player-streamers CreatePlayerStreamer" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxDuration: int # The maximum time, in seconds, that the PlayerStreamer is active (`created` or `started`) before automatically ends. The default value is 300 seconds, and the maximum value is 90000 seconds. Once this maximum duration is reached, Twilio will end the PlayerStreamer, regardless of whether media is still streaming.
+  --StatusCallback: string # The URL to which Twilio will send asynchronous webhook requests for every PlayerStreamer event. See [Status Callbacks](/docs/live/status-callbacks) for more details. (format: uri)
+  --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method Twilio should use to call the `status_callback` URL. Can be `POST` or `GET` and the default is `POST`. (format: http-method)
+  --Video: oneof<nothing, bool> # Specifies whether the PlayerStreamer is configured to stream video. Defaults to `true`.
+]: any -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, links: record, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string, video: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base "/v1/PlayerStreamers")
+  let body = {MaxDuration: $MaxDuration, StatusCallback: $StatusCallback, StatusCallbackMethod: $StatusCallbackMethod, Video: $Video} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Returns a single PlayerStreamer resource identified by a SID.
+#
+# GET /v1/PlayerStreamers/{Sid}
+# operationId: FetchPlayerStreamer
+export def "player-streamers FetchPlayerStreamer" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, links: record, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string, video: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/PlayerStreamers/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a PlayerStreamer resource identified by a SID.
+#
+# POST /v1/PlayerStreamers/{Sid}
+# operationId: UpdatePlayerStreamer
+export def "player-streamers UpdatePlayerStreamer" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  Status: string@Status-completer-1
+]: any -> record<account_sid: string, date_created: string, date_updated: string, ended_reason: string, links: record, max_duration: int, sid: string, status: string, status_callback: string, status_callback_method: string, url: string, video: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/PlayerStreamers/($Sid)")
+  let body = {Status: $Status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# **This method is not enabled.** Returns a single PlaybackGrant resource identified by a SID.
+#
+# GET /v1/PlayerStreamers/{Sid}/PlaybackGrant
+# operationId: FetchPlayerStreamerPlaybackGrant
+export def "player-streamers-playback-grant FetchPlayerStreamerPlaybackGrant" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, grant: any, sid: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/PlayerStreamers/($Sid)/PlaybackGrant")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/PlayerStreamers/{Sid}/PlaybackGrant
+#
+# operationId: CreatePlayerStreamerPlaybackGrant
+export def "player-streamers-playback-grant CreatePlayerStreamerPlaybackGrant" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --AccessControlAllowOrigin: string # The full origin URL where the livestream can be streamed. If this is not provided, it can be streamed from any domain.
+  --Ttl: int # The time to live of the PlaybackGrant. Default value is 15 seconds. Maximum value is 60 seconds.
+]: any -> record<account_sid: string, date_created: string, grant: any, sid: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://media.twilio.com")
+  let full_url = (build-url $base $"/v1/PlayerStreamers/($Sid)/PlaybackGrant")
+  let body = {AccessControlAllowOrigin: $AccessControlAllowOrigin, Ttl: $Ttl} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}

@@ -1,0 +1,2581 @@
+# Auto-generated client for PowerTools Developer v2021.1.01
+# Source: https://api.apis.guru/v2/specs/apptigent.com/2021.1.01/openapi.json
+# Auth: --token flag or $env.POWERTOOLS_DEVELOPER_TOKEN
+
+const BASE_URL = "https://connect.apptigent.com/api/utilities"
+const DEFAULT_AUTH = "x-ibm-client-id"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o POWERTOOLS_DEVELOPER_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "x-ibm-client-id" => { {headers: {X-IBM-Client-Id: $token_val}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://connect.apptigent.com/api/utilities"] }
+def auth-scheme-completer [] { ["x-ibm-client-id"] }
+
+# Completers for enum parameters
+def type-completer [] { ["Maximum" "Minimum"] }
+def type-completer-1 [] { ["Decimal" "Integer"] }
+def ignorecase-completer [] { ["false" "true"] }
+def trim-completer [] { ["false" "true"] }
+def lower-completer [] { ["false" "true"] }
+def source-completer [] { ["Arcminute" "Arcsecond" "Centiradian" "Deciradian" "Degree" "Gradian" "Microdegree" "Microradian" "Millidegree" "Milliradian" "Nanodegree" "Nanoradian" "Radian" "Revolution"] }
+def target-completer [] { ["Arcminute" "Arcsecond" "Centiradian" "Deciradian" "Degree" "Gradian" "Microdegree" "Microradian" "Millidegree" "Milliradian" "Nanodegree" "Nanoradian" "Radian" "Revolution"] }
+def source-completer-1 [] { ["Acre" "Hectare" "SquareCentimeter" "SquareDecimeter" "SquareFoot" "SquareInch" "SquareKilometer" "SquareMeter" "SquareMicrometer" "SquareMile" "SquareMillimeter" "SquareYard"] }
+def target-completer-1 [] { ["Acre" "Hectare" "SquareCentimeter" "SquareDecimeter" "SquareFoot" "SquareInch" "SquareKilometer" "SquareMeter" "SquareMicrometer" "SquareMile" "SquareMillimeter" "SquareYard"] }
+def alphacase-completer [] { ["Lower" "Title" "Upper"] }
+def source-completer-2 [] { ["AUD" "BGN" "BRL" "CAD" "CHF" "CNY" "CZK" "DKK" "EUR" "GBP" "HKD" "HRK" "HUF" "IDR" "ILS" "INR" "ISK" "JPY" "KRW" "MXN" "MYR" "NOK" "NZD" "PHP" "PLN" "RON" "RUB" "SEK" "SGD" "THB" "TRY" "USD" "ZAR"] }
+def target-completer-2 [] { ["AUD" "BGN" "BRL" "CAD" "CHF" "CNY" "CZK" "DKK" "EUR" "GBP" "HKD" "HRK" "HUF" "IDR" "ILS" "INR" "ISK" "JPY" "KRW" "MXN" "MYR" "NOK" "NZD" "PHP" "PLN" "RON" "RUB" "SEK" "SGD" "THB" "TRY" "USD" "ZAR"] }
+def source-completer-3 [] { ["Centimeter" "Decimeter" "Fathom" "Foot" "Hectometer" "Inch" "Kilometer" "LightYear" "Meter" "Micrometer" "Mile" "Millimeter" "Nanometer" "NauticalMile" "Yard"] }
+def target-completer-3 [] { ["Centimeter" "Decimeter" "Fathom" "Foot" "Hectometer" "Inch" "Kilometer" "LightYear" "Meter" "Micrometer" "Mile" "Millimeter" "Nanometer" "NauticalMile" "Yard"] }
+def source-completer-4 [] { ["Day" "Hour" "Microsecond" "Millisecond" "Minute" "Month" "Nanosecond" "Second" "Week" "Year"] }
+def target-completer-4 [] { ["Day" "Hour" "Microsecond" "Millisecond" "Minute" "Month" "Nanosecond" "Second" "Week" "Year"] }
+def source-completer-5 [] { ["BritishThermalUnit" "Calorie" "ElectronVolt" "FootPound" "GigawattHour" "Joule" "Kilocalorie" "Kilojoule" "KilowattHour" "Megajoule" "MegawattHour" "TerawattHour" "Therm (EU)" "Therm (UK)" "Therm (US)" "WattHour"] }
+def target-completer-5 [] { ["BritishThermalUnit" "Calorie" "ElectronVolt" "FootPound" "GigawattHour" "Joule" "Kilocalorie" "Kilojoule" "KilowattHour" "Megajoule" "MegawattHour" "TerawattHour" "Therm (EU)" "Therm (UK)" "Therm (US)" "WattHour"] }
+def format-completer [] { ["BMP" "GIF" "JPG" "PNG" "TIF"] }
+def accept-completer [] { ["image/bmp" "image/gif" "image/jpeg" "image/png"] }
+def source-completer-6 [] { ["BritishThermalUnitPerHour" "Decawatt" "Deciwatt" "ElectricalHorsepower" "Femtowatt" "Gigawatt" "HydraulicHorsepower" "Kilowatt" "MechanicalHorsepower" "Megawatt" "Microwatt" "Milliwatt" "Nanowatt" "Petawatt" "Picowatt" "Terawatt" "Watt"] }
+def target-completer-6 [] { ["BritishThermalUnitPerHour" "Decawatt" "Deciwatt" "ElectricalHorsepower" "Femtowatt" "Gigawatt" "HydraulicHorsepower" "Kilowatt" "MechanicalHorsepower" "Megawatt" "Microwatt" "Milliwatt" "Nanowatt" "Petawatt" "Picowatt" "Terawatt" "Watt"] }
+def source-completer-7 [] { ["CentimeterPerHour" "CentimeterPerMinute" "CentimeterPerSecond" "DecimeterPerMinute" "DecimeterPerSecond" "FootPerHour" "FootPerMinute" "FootPerSecond" "InchPerHour" "InchPerMinute" "InchPerSecond" "KilometerPerHour" "KilometerPerMinute" "KilometerPerSecond" "Knot" "MeterPerHour" "MeterPerMinute" "MeterPerSecond" "MicrometerPerMinute" "MicrometerPerSecond" "MilePerHour" "MillimeterPerHour" "MillimeterPerMinute" "MillimeterPerSecond" "NanometerPerMinute" "NanometerPerSecond" "YardPerHour" "YardPerMinute" "YardPerSecond"] }
+def target-completer-7 [] { ["CentimeterPerHour" "CentimeterPerMinute" "CentimeterPerSecond" "DecimeterPerMinute" "DecimeterPerSecond" "FootPerHour" "FootPerMinute" "FootPerSecond" "InchPerHour" "InchPerMinute" "InchPerSecond" "KilometerPerHour" "KilometerPerMinute" "KilometerPerSecond" "Knot" "MeterPerHour" "MeterPerMinute" "MeterPerSecond" "MicrometerPerMinute" "MicrometerPerSecond" "MilePerHour" "MillimeterPerHour" "MillimeterPerMinute" "MillimeterPerSecond" "NanometerPerMinute" "NanometerPerSecond" "YardPerHour" "YardPerMinute" "YardPerSecond"] }
+def source-completer-8 [] { ["Celsius" "Fahrenheit" "Kelvin" "Newton"] }
+def target-completer-8 [] { ["Celsius" "Fahrenheit" "Kelvin" "Newton"] }
+def source-completer-9 [] { ["Centiliter" "CubicCentimeter" "CubicDecimeter" "CubicFoot" "CubicHectometer" "CubicInch" "CubicKilometer" "CubicMeter" "CubicMillimeter" "CubicYard" "Cup" "Deciliter" "Gallon" "ImperialBeerBarrel" "ImperialGallon" "ImperialOunce" "ImperialPint" "Kiloliter" "Liter" "Microliter" "Milliliter" "Ounce" "Pint" "Quart" "Tablespoon" "Teaspoon"] }
+def target-completer-9 [] { ["Centiliter" "CubicCentimeter" "CubicDecimeter" "CubicFoot" "CubicHectometer" "CubicInch" "CubicKilometer" "CubicMeter" "CubicMillimeter" "CubicYard" "Cup" "Deciliter" "Gallon" "ImperialBeerBarrel" "ImperialGallon" "ImperialOunce" "ImperialPint" "Kiloliter" "Liter" "Microliter" "Milliliter" "Ounce" "Pint" "Quart" "Tablespoon" "Teaspoon"] }
+def source-completer-10 [] { ["Centigram" "Decagram" "Decigram" "Earth Mass" "Grain" "Gram" "Hectogram" "Kilogram" "Long Hundredweight" "Long Ton" "Megaton" "Microgram" "Milligram" "Nanogram" "Ounce" "Pound" "Short Hundredweight" "Short Ton" "Slug" "Solar Mass" "Stone" "Ton"] }
+def target-completer-10 [] { ["Centigram" "Decagram" "Decigram" "Grain" "Gram" "Hectogram" "Kilogram" "Microgram" "Milligram" "Nanogram" "Ounce" "Pound" "Stone" "Ton"] }
+def position-completer [] { ["BottomCenter" "BottomLeft" "BottomRight" "MiddleCenter" "MiddleLeft" "MiddleRight" "TopCenter" "TopLeft" "TopRight"] }
+def culture-completer [] { ["af-ZA" "ar-AE" "ar-BH" "ar-DZ" "ar-EG" "ar-IQ" "ar-JO" "ar-KW" "ar-LB" "ar-LY" "ar-MA" "ar-OM" "ar-QA" "ar-SA" "ar-SY" "ar-TN" "ar-YE" "az-AZ" "be-BY" "bg-BG" "bs-BA" "ca-ES" "cs-CZ" "cy-GB" "da-DK" "de-AT" "de-CH" "de-DE" "de-LI" "de-LU" "el-GR" "en-AU" "en-BZ" "en-CA" "en-CB" "en-GB" "en-IE" "en-JM" "en-NZ" "en-PH" "en-TT" "en-US" "en-ZA" "en-ZW" "es-AR" "es-BO" "es-CL" "es-CO" "es-CR" "es-DO" "es-EC" "es-ES" "es-GT" "es-HN" "es-MX" "es-NI" "es-PA" "es-PE" "es-PR" "es-PY" "es-SV" "es-UY" "es-VE" "et-EE" "eu-ES" "fa-IR" "fi-FI" "fo-FO" "fr-BE" "fr-CA" "fr-CH" "fr-FR" "fr-LU" "fr-MC" "gl-ES" "gu-IN" "he-IL" "hi-IN" "hr-BA" "hr-HR" "hu-HU" "hy-AM" "id-ID" "is-IS" "it-CH" "it-IT" "ja-JP" "ka-GE" "kk-KZ" "kn-IN" "ko-KR" "ky-KG" "lt-LT" "lv-LV" "mi-NZ" "mn-MN" "mr-IN" "ms-BN" "ms-MY" "mt-MT" "nl-BE" "nl-NL" "nn-NO" "ns-ZA" "pa-IN" "pl-PL" "ps-AR" "pt-BR" "pt-PT" "ro-RO" "ru-RU" "sa-IN" "sk-SK" "sl-SI" "sq-AL" "sr-BA" "sr-SP" "sv-FI" "sv-SE" "sw-KE" "ta-IN" "te-IN" "th-TH" "tl-PH" "tn-ZA" "tr-TR" "uk-UA" "ur-PK" "uz-UZ" "vi-VN" "zh-CN" "zh-HK" "zh-MO" "zh-SG" "zh-TW" "zu-ZA"] }
+def match-completer [] { ["All" "Any" "None"] }
+def orientation-completer [] { ["Horizontal" "Vertical"] }
+def uppercase-completer [] { ["false" "true"] }
+def algorithm-completer [] { ["MD5" "SHA1" "SHA256" "SHA384" "SHA512"] }
+def payload-completer [] { ["Bitcoin Payment (address|amount|label|message)" "Bookmark (url|title)" "Calendar Event (subject|description|location|start|end|allDayEvent['true' or 'false']|format ['universal' or 'iCal'])" "Geolocation (latitude|longitude)" "Mail (recipient|subject|message)" "Phone Number (string)" "Plain Text (string)" "SMS (number|message)" "URL (string)" "WiFi (ssid|password|authenticationMode ['WEP', 'WPA' or 'WPA2'])"] }
+def symbol-completer [] { ["CDAXX.INDX (DAX Composite Index [Germany])" "DJA.INDX (Dow Jones Composite Average)" "DJI.INDX (Dow Jones Industrial Average)" "DJT.INDX (Dow Jones Transportation)" "DJUS.INDX (Dow Jones US)" "DXY.INDX (US Dollar Index)" "ES.INDX (S&P 500 Futures)" "FTSE.INDX (FTSE 100 Index [UK])" "GDAXI.INDX (DAX Index [Germany])" "GDOW.INDX (Global Dow USD)" "GPTSE.INDX (S&P TSX Composite Index [Canada])" "GSPC.INDX (S&P 500)" "HSCE.INDX (Hang Seng China Enterprise (CEI))" "HSI.INDX (Hang Seng Index [Hong Kong])" "IXIC.INDX (NASDAQ Composite)" "MID.INDX (S&P Midcap 400)" "N100.INDX (EuroNext 100)" "N225.INDX (Nikkei 225 Index)" "NDX.INDX (NASDAQ 100)" "NY.INDX (NYSE US 100 Index)" "NYA.INDX (NYSE Composite)" "RTSI.INDX (RTSI Index [Russia])" "SSEC.INDX (Shanghai Composite)" "SSMI.INDX (Swiss Market Index)"] }
+def ignoreCase-completer [] { ["false" "true"] }
+def algorithm-completer-1 [] { ["Bicubic (default)" "Bilinear" "Cubic (Box)" "Cubic (Catmull-Rom)" "Cubic (Hermite)" "Cubic (Spline)" "Nearest Neighbor" "Robidoux" "Robidoux Sharp" "Sinc (Lanczos2)" "Sinc (Lanczos3)" "Sinc (Lanczos5)" "Sinc (Lanczos8)"] }
+def units-completer [] { ["Percent" "Pixels"] }
+def order-completer [] { ["Ascending" "Descending"] }
+def language-completer [] { ["Arabic (Bahrain)" "Arabic (Egypt)" "Arabic (Iraq)" "Arabic (Jordan)" "Arabic (Kuwait)" "Arabic (Lebanon)" "Arabic (Oman)" "Arabic (Qatar)" "Arabic (Saudi Arabia)" "Arabic (Syria)" "Arabic (United Arab Emirates)" "Bulgarian (Bulgaria)" "Catalan (Spain)" "Chinese (Cantonese, Traditional)" "Chinese (Mandarin, Simplified)" "Chinese (Taiwanese Mandarin)" "Croatian (Croatia)" "Czech (Czech Republic)" "Danish (Denmark)" "Dutch (Netherlands)" "English (Australia)" "English (Canada)" "English (Hong Kong)" "English (India)" "English (Ireland)" "English (New Zealand)" "English (Philippines)" "English (Singapore)" "English (South Africa)" "English (United Kingdom)" "English (United States)" "Estonian(Estonia)" "Finnish (Finland)" "French (Canada)" "French (France)" "German (Germany)" "Greek (Greece)" "Gujarati (Indian)" "Hindi (India)" "Hungarian (Hungary)" "Irish(Ireland)" "Italian (Italy)" "Japanese (Japan)" "Korean (Korea)" "Latvian (Latvia)" "Lithuanian (Lithuania)" "Maltese(Malta)" "Marathi (India)" "Norwegian (Norway)" "Polish (Poland)" "Portuguese (Brazil)" "Portuguese (Portugal)" "Romanian (Romania)" "Russian (Russia)" "Slovak (Slovakia)" "Slovenian (Slovenia)" "Spanish (Argentina)" "Spanish (Bolivia)" "Spanish (Chile)" "Spanish (Colombia)" "Spanish (Costa Rica)" "Spanish (Cuba)" "Spanish (Dominican Republic)" "Spanish (Ecuador)" "Spanish (El Salvador)" "Spanish (Guatemala)" "Spanish (Honduras)" "Spanish (Mexico)" "Spanish (Nicaragua)" "Spanish (Panama)" "Spanish (Paraguay)" "Spanish (Peru)" "Spanish (Puerto Rico)" "Spanish (Spain)" "Spanish (USA)" "Spanish (Uruguay)" "Spanish (Venezuela)" "Swedish (Sweden)" "Tamil (India)" "Telugu (India)" "Thai (Thailand)" "Turkish (Turkey)"] }
+def exchange-completer [] { ["BMEX (Bolsas y Mercados Españoles)" "MISX (Moscow Stock Exchange)" "XASE (American Stock Exchange)" "XASX (Australia Stock Exchange)" "XBKK (Stock Exchange of Thailand)" "XBRU (Euronext Brussels)" "XCNQ (Candadian Securities Exchange)" "XCSE (Copenhagen Stock Exchange)" "XDFM (Dubai Financial Market)" "XFKA (Fukuoka Stock Exchange)" "XFRA (Deutsche Borse)" "XHKG (Hong Kong Stock Exchange)" "XJSE (Johannesburg Stock Exchange)" "XLIS (Euronext Lisbon)" "XLON (London Stock Exchange)" "XMEX (Mexican Stock Exchange)" "XNAS (NASDAQ Stock Exchange)" "XNGO (Nagoya Stock Exchange)" "XNSE (National Stock Exchange India)" "XNYS (New York Stock Exchange)" "XNZE (New Zealand Stock Exchange)" "XPAR (Euronext Paris)" "XSAP (Sapporo Stock Exchange)" "XSES (Singapore Stock Exchange)" "XSHG (Shanghai Stock Exchange)" "XSTO (Stockholm Stock Exchange)" "XSWX (SIX Swiss Exchange)" "XTAE (Tel Aviv Stock Exchange)" "XTSE (Toronto Stock Exchange)"] }
+def extension-completer [] { ["CSS" "CSV" "HTML" "JS" "JSON" "TXT" "XML"] }
+def accept-completer-1 [] { ["application/json" "application/xml" "text/css" "text/csv" "text/html" "text/javascript" "text/plain"] }
+def type-completer-2 [] { ["PlainText" "SSML"] }
+def voice-completer [] { ["ar-EG, Hoda (Female)" "ar-SA, Naayf (Male)" "bg-BG, Ivan (Male)" "ca-ES, Herena (Female)" "cs-CZ, Jakub (Male)" "da-DK, Helle (Female)" "de-AT, Michael (Male)" "de-CH, Karsten (Male)" "de-DE, Hedda (Female)" "de-DE, Stefan (Male)" "el-GR, Stefanos (Male)" "en-AU, Catherine (Female)" "en-AU, Hayley (Female)" "en-CA, Heather (Female)" "en-CA, Linda (Female)" "en-GB, George (Male)" "en-GB, Hazel (Female)" "en-GB, Susan (Female)" "en-IE, Sean (Male)" "en-IN, Heera (Female)" "en-IN, Priya (Female)" "en-IN, Ravi (Male)" "en-US, Aria (Female)" "en-US, Benjamin (Male)" "en-US, Guy (Male)" "en-US, Zira (Female)" "es-ES, Helena (Female)" "es-ES, Laura (Female)" "es-ES, Pablo (Male)" "es-MX, Hilda (Female)" "es-MX, Raul (Male)" "fi-FI, Heidi (Female)" "fr-CA, Caroline (Female)" "fr-CA, Harmonie (Female)" "fr-CH, Guillaume (Male)" "fr-FR, Hortense (Female)" "fr-FR, Julie (Female)" "fr-FR, Paul (Male)" "he-IL, Asaf (Male)" "hi-IN, Hemant (Male)" "hi-IN, Kalpana (Female)" "hr-HR, Matej (Male)" "hu-HU, Szabolcs (Male)" "id-ID, Andika (Male)" "it-IT, Cosimo (Male)" "it-IT, Lucia (Female)" "ja-JP, Ayumi (Female)" "ja-JP, Haruka (Female)" "ja-JP, Ichiro (Male)" "ko-KR, Heami (Female)" "ms-MY, Rizwan (Male)" "nb-NO, Hulda (Female)" "nl-NL, Hanna (Female)" "pl-PL, Paulina (Female)" "pt-BR, Daniel (Male)" "pt-BR, Heloisa (Female)" "pt-PT, Helia (Female)" "ro-RO, Andrei (Male)" "ru-RU, Ekaterina (Female)" "ru-RU, Irina (Female)" "ru-RU, Pavel (Male)" "sk-SK, Filip (Male)" "sl-SI, Lado (Male)" "sv-SE, Hedvig (Female)" "ta-IN, Valluvar (Male)" "te-IN, Chitra (Female)" "th-TH, Pattara (Male)" "tr-TR, Seda (Female)" "vi-VN, An (Male)" "zh-CN, Huihui (Female)" "zh-CN, Kangkang (Male)" "zh-CN, Yaoyao (Female)" "zh-HK, Danny (Male)" "zh-HK, Tracy (Female)" "zh-TW, HanHan (Female)" "zh-TW, Yating (Female)" "zh-TW, Zhiwei (Male)"] }
+def language-completer-1 [] { ["Arabic" "Chinese (Simplified)" "Czech" "Danish" "Dutch" "English" "Finnish" "French" "German" "Greek" "Hindi" "Hungarian" "Italian" "Japanese" "Klingon" "Korean" "Norweigan" "Polish" "Portuguese" "Russian" "Spanish" "Swedish" "Turkish" "Vietnamese" "Welsh"] }
+def type-completer-3 [] { ["Both" "End" "Start"] }
+def font-completer [] { ["Arial" "Arial Black" "Arial Narrow" "Book Antiqua" "Britannic Bold" "Brush Script MT" "Calisto MT" "Century Gothic" "Century Schoolbook" "Colonna MT" "Comic Sans MS" "Cooper Black" "Copperplate Gothic Bold" "Copperplate Gothic Light" "Courier New" "Edwardian Script ITC" "Engravers MT" "Franklin Gothic Demi" "Franklin Gothic Heavy" "Franklin Gothic Medium" "Garamond" "Georgia" "Gill Sans MT" "Gill Sans MT Condensed" "Gill Sans Ultra Bold" "Gill Sans Ultra Bold Condensed" "Goudy Old Style" "Haettenschweiler" "Holidays MT" "Impact" "Lucida Calligraphy" "Lucida Console" "Lucida Handwriting" "Lucida Sans Typewriter" "Lucida Sans Unicode" "MS Outlook" "Marlett" "Microsoft Sans Serif" "Palace Script MT" "Palatino Linotype" "Papyrus" "Playbill" "Rockwell" "Rockwell Condensed" "Rockwell Extra Bold" "Script MT Bold" "Stencil" "Symbol" "Tahoma" "Times New Roman" "Trebuchet MS" "Verdana" "Vivaldi" "Webdings" "Wingdings 1" "Wingdings 2" "Wingdings 3"] }
+def horizontal-completer [] { ["Center" "Left" "Right"] }
+def vertical-completer [] { ["Bottom" "Center" "Top"] }
+def source-completer-11 [] { ["AUS Central Standard Time - (GMT+09:30) Darwin" "AUS Eastern Standard Time - (GMT+10:00) Canberra, Melbourne, Sydney" "Afghanistan Standard Time - (GMT+04:30) Kabul" "Alaskan Standard Time - (GMT-09:00) Alaska" "Arab Standard Time - (GMT+03:00) Kuwait, Riyadh" "Arabian Standard Time - (GMT+04:00) Abu Dhabi, Muscat" "Arabic Standard Time - (GMT+03:00) Baghdad" "Argentina Standard Time - (GMT-03:00) Buenos Aires" "Atlantic Standard Time - (GMT-04:00) Atlantic Time (Canada)" "Azerbaijan Standard Time - (GMT+04:00) Baku" "Azores Standard Time - (GMT-01:00) Azores" "Canada Central Standard Time - (GMT-06:00) Saskatchewan" "Cape Verde Standard Time - (GMT-01:00) Cape Verde Is." "Caucasus Standard Time - (GMT+04:00) Yerevan" "Cen. Australia Standard Time - (GMT+09:30) Adelaide" "Central America Standard Time - (GMT-06:00) Central America" "Central Asia Standard Time - (GMT+06:00) Astana, Dhaka" "Central Brazilian Standard Time - (GMT-04:00) Manaus" "Central Europe Standard Time - (GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague" "Central European Standard Time - (GMT+01:00) Sarajevo, Skopje, Warsaw, Zagreb" "Central Pacific Standard Time - (GMT+11:00) Magadan, Solomon Is., New Caledonia" "Central Standard Time (Mexico) - (GMT-06:00) Guadalajara, Mexico City, Monterrey" "Central Standard Time - (GMT-06:00) Central Time (US & Canada)" "China Standard Time - (GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi" "Dateline Standard Time - (GMT-12:00) International Date Line West" "E. Africa Standard Time - (GMT+03:00) Nairobi" "E. Australia Standard Time - (GMT+10:00) Brisbane" "E. Europe Standard Time - (GMT+02:00) Minsk" "E. South America Standard Time - (GMT-03:00) Brasilia" "Eastern Standard Time - (GMT-05:00) Eastern Time (US & Canada)" "Egypt Standard Time - (GMT+02:00) Cairo" "Ekaterinburg Standard Time - (GMT+05:00) Ekaterinburg" "FLE Standard Time - (GMT+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius" "Fiji Standard Time - (GMT+12:00) Fiji, Kamchatka, Marshall Is." "GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London" "GTB Standard Time - (GMT+02:00) Athens, Bucharest, Istanbul" "Georgian Standard Time - (GMT+03:00) Tbilisi" "Greenland Standard Time - (GMT-03:00) Greenland" "Greenwich Standard Time - (GMT) Monrovia, Reykjavik" "Hawaiian Standard Time - (GMT-10:00) Hawaii" "India Standard Time - (GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi" "Iran Standard Time - (GMT+03:30) Tehran" "Israel Standard Time - (GMT+02:00) Jerusalem" "Korea Standard Time - (GMT+09:00) Seoul" "Mauritius Standard Time - (GMT+04:00) Port Louis" "Mid-Atlantic Standard Time - (GMT-02:00) Mid-Atlantic" "Middle East Standard Time - (GMT+02:00) Beirut" "Montevideo Standard Time - (GMT-03:00) Montevideo" "Mountain Standard Time (Mexico) - (GMT-07:00) Chihuahua, La Paz, Mazatlan" "Mountain Standard Time - (GMT-07:00) Mountain Time (US & Canada)" "Myanmar Standard Time - (GMT+06:30) Yangon (Rangoon)" "N. Central Asia Standard Time - (GMT+06:00) Almaty, Novosibirsk" "Namibia Standard Time - (GMT+02:00) Windhoek" "Nepal Standard Time - (GMT+05:45) Kathmandu" "New Zealand Standard Time - (GMT+12:00) Auckland, Wellington" "Newfoundland Standard Time - (GMT-03:30) Newfoundland" "North Asia East Standard Time - (GMT+08:00) Irkutsk, Ulaan Bataar" "North Asia Standard Time - (GMT+07:00) Krasnoyarsk" "Pacific SA Standard Time - (GMT-04:00) Santiago" "Pacific Standard Time (Mexico) - (GMT-08:00) Tijuana, Baja California" "Pacific Standard Time - (GMT-08:00) Pacific Time (US & Canada)" "Pakistan Standard Time - (GMT+05:00) Islamabad, Karachi" "Russian Standard Time - (GMT+03:00) Moscow, St. Petersburg, Volgograd" "SA Eastern Standard Time - (GMT-03:00) Georgetown" "SA Pacific Standard Time - (GMT-05:00) Bogota, Lima, Quito, Rio Branco" "SA Western Standard Time - (GMT-04:00) La Paz" "SE Asia Standard Time - (GMT+07:00) Bangkok, Hanoi, Jakarta" "Samoa Standard Time - (GMT-11:00) Midway Island, Samoa" "Singapore Standard Time - (GMT+08:00) Kuala Lumpur, Singapore" "South Africa Standard Time - (GMT+02:00) Harare, Pretoria" "Sri Lanka Standard Time - (GMT+05:30) Sri Jayawardenepura" "Taipei Standard Time - (GMT+08:00) Taipei" "Tasmania Standard Time - (GMT+10:00) Hobart" "Tokyo Standard Time - (GMT+09:00) Osaka, Sapporo, Tokyo" "Tonga Standard Time - (GMT+13:00) Nuku'alofa" "US Eastern Standard Time - (GMT-05:00) Indiana (East)" "US Mountain Standard Time - (GMT-07:00) Arizona" "Venezuela Standard Time - (GMT-04:30) Caracas" "Vladivostok Standard Time - (GMT+10:00) Vladivostok" "W. Australia Standard Time - (GMT+08:00) Perth" "W. Central Africa Standard Time - (GMT+01:00) West Central Africa" "W. Europe Standard Time - (GMT+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna" "West Asia Standard Time - (GMT+05:00) Tashkent" "West Pacific Standard Time - (GMT+10:00) Guam, Port Moresby" "Yakutsk Standard Time - (GMT+09:00) Yakutsk"] }
+def target-completer-11 [] { ["AUS Central Standard Time - (GMT+09:30) Darwin" "AUS Eastern Standard Time - (GMT+10:00) Canberra, Melbourne, Sydney" "Afghanistan Standard Time - (GMT+04:30) Kabul" "Alaskan Standard Time - (GMT-09:00) Alaska" "Arab Standard Time - (GMT+03:00) Kuwait, Riyadh" "Arabian Standard Time - (GMT+04:00) Abu Dhabi, Muscat" "Arabic Standard Time - (GMT+03:00) Baghdad" "Argentina Standard Time - (GMT-03:00) Buenos Aires" "Atlantic Standard Time - (GMT-04:00) Atlantic Time (Canada)" "Azerbaijan Standard Time - (GMT+04:00) Baku" "Azores Standard Time - (GMT-01:00) Azores" "Canada Central Standard Time - (GMT-06:00) Saskatchewan" "Cape Verde Standard Time - (GMT-01:00) Cape Verde Is." "Caucasus Standard Time - (GMT+04:00) Yerevan" "Cen. Australia Standard Time - (GMT+09:30) Adelaide" "Central America Standard Time - (GMT-06:00) Central America" "Central Asia Standard Time - (GMT+06:00) Astana, Dhaka" "Central Brazilian Standard Time - (GMT-04:00) Manaus" "Central Europe Standard Time - (GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague" "Central European Standard Time - (GMT+01:00) Sarajevo, Skopje, Warsaw, Zagreb" "Central Pacific Standard Time - (GMT+11:00) Magadan, Solomon Is., New Caledonia" "Central Standard Time (Mexico) - (GMT-06:00) Guadalajara, Mexico City, Monterrey" "Central Standard Time - (GMT-06:00) Central Time (US & Canada)" "China Standard Time - (GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi" "Dateline Standard Time - (GMT-12:00) International Date Line West" "E. Africa Standard Time - (GMT+03:00) Nairobi" "E. Australia Standard Time - (GMT+10:00) Brisbane" "E. Europe Standard Time - (GMT+02:00) Minsk" "E. South America Standard Time - (GMT-03:00) Brasilia" "Eastern Standard Time - (GMT-05:00) Eastern Time (US & Canada)" "Egypt Standard Time - (GMT+02:00) Cairo" "Ekaterinburg Standard Time - (GMT+05:00) Ekaterinburg" "FLE Standard Time - (GMT+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius" "Fiji Standard Time - (GMT+12:00) Fiji, Kamchatka, Marshall Is." "GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London" "GTB Standard Time - (GMT+02:00) Athens, Bucharest, Istanbul" "Georgian Standard Time - (GMT+03:00) Tbilisi" "Greenland Standard Time - (GMT-03:00) Greenland" "Greenwich Standard Time - (GMT) Monrovia, Reykjavik" "Hawaiian Standard Time - (GMT-10:00) Hawaii" "India Standard Time - (GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi" "Iran Standard Time - (GMT+03:30) Tehran" "Israel Standard Time - (GMT+02:00) Jerusalem" "Korea Standard Time - (GMT+09:00) Seoul" "Mauritius Standard Time - (GMT+04:00) Port Louis" "Mid-Atlantic Standard Time - (GMT-02:00) Mid-Atlantic" "Middle East Standard Time - (GMT+02:00) Beirut" "Montevideo Standard Time - (GMT-03:00) Montevideo" "Mountain Standard Time (Mexico) - (GMT-07:00) Chihuahua, La Paz, Mazatlan" "Mountain Standard Time - (GMT-07:00) Mountain Time (US & Canada)" "Myanmar Standard Time - (GMT+06:30) Yangon (Rangoon)" "N. Central Asia Standard Time - (GMT+06:00) Almaty, Novosibirsk" "Namibia Standard Time - (GMT+02:00) Windhoek" "Nepal Standard Time - (GMT+05:45) Kathmandu" "New Zealand Standard Time - (GMT+12:00) Auckland, Wellington" "Newfoundland Standard Time - (GMT-03:30) Newfoundland" "North Asia East Standard Time - (GMT+08:00) Irkutsk, Ulaan Bataar" "North Asia Standard Time - (GMT+07:00) Krasnoyarsk" "Pacific SA Standard Time - (GMT-04:00) Santiago" "Pacific Standard Time (Mexico) - (GMT-08:00) Tijuana, Baja California" "Pacific Standard Time - (GMT-08:00) Pacific Time (US & Canada)" "Pakistan Standard Time - (GMT+05:00) Islamabad, Karachi" "Russian Standard Time - (GMT+03:00) Moscow, St. Petersburg, Volgograd" "SA Eastern Standard Time - (GMT-03:00) Georgetown" "SA Pacific Standard Time - (GMT-05:00) Bogota, Lima, Quito, Rio Branco" "SA Western Standard Time - (GMT-04:00) La Paz" "SE Asia Standard Time - (GMT+07:00) Bangkok, Hanoi, Jakarta" "Samoa Standard Time - (GMT-11:00) Midway Island, Samoa" "Singapore Standard Time - (GMT+08:00) Kuala Lumpur, Singapore" "South Africa Standard Time - (GMT+02:00) Harare, Pretoria" "Sri Lanka Standard Time - (GMT+05:30) Sri Jayawardenepura" "Taipei Standard Time - (GMT+08:00) Taipei" "Tasmania Standard Time - (GMT+10:00) Hobart" "Tokyo Standard Time - (GMT+09:00) Osaka, Sapporo, Tokyo" "Tonga Standard Time - (GMT+13:00) Nuku'alofa" "US Eastern Standard Time - (GMT-05:00) Indiana (East)" "US Mountain Standard Time - (GMT-07:00) Arizona" "Venezuela Standard Time - (GMT-04:30) Caracas" "Vladivostok Standard Time - (GMT+10:00) Vladivostok" "W. Australia Standard Time - (GMT+08:00) Perth" "W. Central Africa Standard Time - (GMT+01:00) West Central Africa" "W. Europe Standard Time - (GMT+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna" "West Asia Standard Time - (GMT+05:00) Tashkent" "West Pacific Standard Time - (GMT+10:00) Guam, Port Moresby" "Yakutsk Standard Time - (GMT+09:00) Yakutsk"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection AddToCollection" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Collections - Add to collection
+#
+# POST /AddToCollection
+# operationId: AddToCollection
+export def "add-to-collection AddToCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --index: string # Index position for operation (leave blank to specify end of collection)
+  input: list # Collection of values or objects to modify
+  --item: string # Item (for multiple items, leave blank and use Items)
+  --items: list # Items (Collection, for a single item leave blank and use Item)
+]: any -> record<result: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/AddToCollection")
+  let body = {index: $index, input: $input, item: $item, items: $items} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - CSV to JSON
+#
+# POST /CSVtoJSON
+# operationId: CsvToJson
+export def "cs-vto-json CsvToJson" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --header: oneof<nothing, bool> # Include header row (default: true)
+  input: string # CSV string
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CSVtoJSON")
+  let body = {header: $header, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Absolute
+#
+# POST /CalculateAbsolute
+# operationId: CalculateAbsolute
+export def "calculate-absolute CalculateAbsolute" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateAbsolute")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Addition
+#
+# POST /CalculateAddition
+# operationId: CalculateAddition
+export def "calculate-addition CalculateAddition" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateAddition")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate average
+#
+# POST /CalculateAverage
+# operationId: CalculateAverage
+export def "calculate-average CalculateAverage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: list # Colllection of values to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateAverage")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Cosine
+#
+# POST /CalculateCosine
+# operationId: CalculateCosine
+export def "calculate-cosine CalculateCosine" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateCosine")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Division
+#
+# POST /CalculateDivision
+# operationId: CalculateDivision
+export def "calculate-division CalculateDivision" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateDivision")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Logarithm
+#
+# POST /CalculateLogarithm
+# operationId: CalculateLogarithm
+export def "calculate-logarithm CalculateLogarithm" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateLogarithm")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate median
+#
+# POST /CalculateMedian
+# operationId: CalculateMedian
+export def "calculate-median CalculateMedian" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: list # Colllection of values to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateMedian")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate minimum or maximum
+#
+# POST /CalculateMinMax
+# operationId: CalculateMinMax
+export def "calculate-min-max CalculateMinMax" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Colllection of values to calculate
+  type: string@type-completer # Minimum or Maximum (default: Minimum)
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateMinMax")
+  let body = {input: $input, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Modulo
+#
+# POST /CalculateModulo
+# operationId: CalculateModulo
+export def "calculate-modulo CalculateModulo" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateModulo")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Multiplication
+#
+# POST /CalculateMultiplication
+# operationId: CalculateMultiplication
+export def "calculate-multiplication CalculateMultiplication" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateMultiplication")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Nth Root
+#
+# POST /CalculateNthRoot
+# operationId: CalculateNthRoot
+export def "calculate-nth-root CalculateNthRoot" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateNthRoot")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate power
+#
+# POST /CalculatePower
+# operationId: CalculatePower
+export def "calculate-power CalculatePower" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Number to raise
+  power: float # Power
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculatePower")
+  let body = {decimals: $decimals, input: $input, power: $power} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Sine
+#
+# POST /CalculateSine
+# operationId: CalculateSine
+export def "calculate-sine CalculateSine" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateSine")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Square Root
+#
+# POST /CalculateSquareRoot
+# operationId: CalculateSquareRoot
+export def "calculate-square-root CalculateSquareRoot" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateSquareRoot")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Subtraction
+#
+# POST /CalculateSubtraction
+# operationId: CalculateSubtraction
+export def "calculate-subtraction CalculateSubtraction" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value
+  value: float # Addend, subtrahend, factor, divisor or radicand
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateSubtraction")
+  let body = {decimals: $decimals, input: $input, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate sum
+#
+# POST /CalculateSum
+# operationId: CalculateSum
+export def "calculate-sum CalculateSum" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: list # Colllection of values to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateSum")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate Tangent
+#
+# POST /CalculateTangent
+# operationId: CalculateTangent
+export def "calculate-tangent CalculateTangent" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateTangent")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate variance
+#
+# POST /CalculateVariance
+# operationId: CalculateVariance
+export def "calculate-variance CalculateVariance" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: list # Colllection of values to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CalculateVariance")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Contains number
+#
+# POST /CollectionContainsNumber
+# operationId: CollectionContainsNumber
+export def "collection-contains-number CollectionContainsNumber" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection of strings to search
+  --body-match: float # Number to match
+  --type: string@type-completer-1 # Type of number - integer or decimal (default: Integer)
+]: any -> record<item: float, items: list<float>, status: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionContainsNumber")
+  let body = {input: $input, match: $body_match, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Contains string
+#
+# POST /CollectionContainsString
+# operationId: CollectionContainsString
+export def "collection-contains-string CollectionContainsString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
+  input: list # Collection of strings to search
+  --body-match: string # Text to match
+  --trim: string@trim-completer # Trim white space from comparison string
+]: any -> record<item: string, items: list<string>, status: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionContainsString")
+  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Ends with string
+#
+# POST /CollectionEndsWithString
+# operationId: CollectionEndsWithString
+export def "collection-ends-with-string CollectionEndsWithString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
+  input: list # Collection of strings to search
+  --body-match: string # Text to match
+  --trim: string@trim-completer # Trim white space from comparison string
+]: any -> record<item: string, items: list<string>, status: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionEndsWithString")
+  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Starts with string
+#
+# POST /CollectionStartsWithString
+# operationId: CollectionStartsWithString
+export def "collection-starts-with-string CollectionStartsWithString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
+  input: list # Collection of strings to search
+  --body-match: string # Text to match
+  --trim: string@trim-completer # Trim white space from comparison string
+]: any -> record<item: string, items: list<string>, status: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionStartsWithString")
+  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Collection to JSON
+#
+# POST /CollectionToJSON
+# operationId: CollectionToJSON
+export def "collection-to-json CollectionToJSON" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection containing strings to convert
+  name: string # Collection name
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionToJSON")
+  let body = {input: $input, name: $name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Collection to XML
+#
+# POST /CollectionToXML
+# operationId: CollectionToXml
+export def "collection-to-xml CollectionToXml" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  child: string # Name of child XML node(s)
+  input: list # Collection containing strings to convert
+  root: string # Name of root XML node
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CollectionToXML")
+  let body = {child: $child, input: $input, root: $root} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Compare strings
+#
+# POST /CompareStrings
+# operationId: CompareStrings
+export def "compare-strings CompareStrings" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  compare: string # Comparison string
+  input: string # Original string
+  lower: string@lower-completer # Convert strings to lowercase before comparison
+  trim: string@trim-completer # Trim strings before comparison
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CompareStrings")
+  let body = {compare: $compare, input: $input, lower: $lower, trim: $trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Contains string
+#
+# POST /ContainsString
+# operationId: ContainsString
+export def "contains-string ContainsString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  find: string # Text to match
+  input: string # Text to search
+  lower: string@lower-completer # Convert strings to lowercase
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ContainsString")
+  let body = {find: $find, input: $input, lower: $lower} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert angle
+#
+# POST /ConvertAngle
+# operationId: ConvertAngle
+export def "convert-angle ConvertAngle" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer
+  target: string@target-completer
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertAngle")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert area
+#
+# POST /ConvertArea
+# operationId: ConvertArea
+export def "convert-area ConvertArea" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-1
+  target: string@target-completer-1
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertArea")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Convert case
+#
+# POST /ConvertCase
+# operationId: ConvertCase
+export def "convert-case ConvertCase" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  alphacase: string@alphacase-completer # Case of conversion result
+  input: string # String containing the text to convert
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertCase")
+  let body = {alphacase: $alphacase, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Currency - Convert currency
+#
+# POST /ConvertCurrency
+# operationId: ConvertCurrency
+export def "convert-currency ConvertCurrency" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float # Amount to convert
+  --body-source: string@source-completer-2 # default: USD
+  target: string@target-completer-2
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertCurrency")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert distance
+#
+# POST /ConvertDistance
+# operationId: ConvertDistance
+export def "convert-distance ConvertDistance" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-3
+  target: string@target-completer-3
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertDistance")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert duration
+#
+# POST /ConvertDuration
+# operationId: ConvertDuration
+export def "convert-duration ConvertDuration" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-4
+  target: string@target-completer-4
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertDuration")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert energy
+#
+# POST /ConvertEnergy
+# operationId: ConvertEnergy
+export def "convert-energy ConvertEnergy" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-5
+  target: string@target-completer-5
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertEnergy")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Convert Image
+#
+# POST /ConvertImage
+# operationId: ConvertImage
+export def "convert-image ConvertImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  file: string # Source image file (format: binary)
+  format: string@format-completer # Output file format (default: PNG)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertImage")
+  let body = {file: $file, format: $format} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "image/bmp")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Math - Convert power
+#
+# POST /ConvertPower
+# operationId: ConvertPower
+export def "convert-power ConvertPower" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-6
+  target: string@target-completer-6
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertPower")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert speed
+#
+# POST /ConvertSpeed
+# operationId: ConvertSpeed
+export def "convert-speed ConvertSpeed" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-7
+  target: string@target-completer-7
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertSpeed")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert temperature
+#
+# POST /ConvertTemperature
+# operationId: ConvertTemperature
+export def "convert-temperature ConvertTemperature" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-8
+  target: string@target-completer-8
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertTemperature")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert volume
+#
+# POST /ConvertVolume
+# operationId: ConvertVolume
+export def "convert-volume ConvertVolume" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-9
+  target: string@target-completer-9
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertVolume")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Convert weight
+#
+# POST /ConvertWeight
+# operationId: ConvertWeight
+export def "convert-weight ConvertWeight" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float
+  --body-source: string@source-completer-10
+  target: string@target-completer-10
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ConvertWeight")
+  let body = {input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Count collection
+#
+# POST /CountCollection
+# operationId: CountCollection
+export def "count-collection CountCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection of items to count
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CountCollection")
+  let body = {input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Crop Image
+#
+# POST /CropImage
+# operationId: CropImage
+export def "crop-image CropImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  Height: float # Height (Y-axis down, negative to reverse)
+  Width: float # Width (X-axis right, negative to reverse)
+  file: string # Source image file (format: binary)
+  position: string@position-completer # Crop start position (use negative values to reverse crop area) (default: TopLeft)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/CropImage")
+  let body = {Height: $Height, Width: $Width, file: $file, position: $position} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "image/bmp")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# DateTime - DateTime difference
+#
+# POST /DateTimeDifference
+# operationId: DateTimeDifference
+export def "date-time-difference DateTimeDifference" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  dateTime1: string # First date/time value
+  dateTime2: string # Second date/time value
+]: any -> record<days: float, hours: float, milliseconds: float, minutes: float, months: float, ticks: float, totalDays: float, totalHours: float, totalMilliseconds: float, totalMinutes: float, totalMonths: float, totalSeconds: float, totalYears: float, years: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/DateTimeDifference")
+  let body = {dateTime1: $dateTime1, dateTime2: $dateTime2} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# DateTime - Get date and time information
+#
+# POST /DateTimeInfo
+# operationId: DateTimeInfo
+export def "date-time-info DateTimeInfo" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  culture: string@culture-completer # Language culture (default: en-US)
+  input: string # Source date and time
+]: any -> record<DayOfWeek: float, DayOfYear: float, MinutesInDay: float, SecondsInDay: float, Ticks: float, WeekOfYear: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/DateTimeInfo")
+  let body = {culture: $culture, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Decode string
+#
+# POST /DecodeString
+# operationId: DecodeString
+export def "decode-string DecodeString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # Encoded string variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/DecodeString")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Encode string
+#
+# POST /EncodeString
+# operationId: EncodeString
+export def "encode-string EncodeString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # String variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/EncodeString")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - File to string
+#
+# POST /FileToString
+# operationId: FileToString
+export def "file-to-string FileToString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  file: string # Source file (10MB limit) (format: binary)
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/FileToString")
+  let body = {file: $file} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Collections - Filter collection
+#
+# POST /FilterCollection
+# operationId: FilterCollection
+export def "filter-collection FilterCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection of strings to filter
+  keywords: string # Keywords (separate multiple values with commas)
+  --body-match: string@match-completer # Match type (default: Any)
+]: any -> record<result: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/FilterCollection")
+  let body = {input: $input, keywords: $keywords, match: $body_match} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Flip Image
+#
+# POST /FlipImage
+# operationId: FlipImage
+export def "flip-image FlipImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  file: string # Source image file (format: binary)
+  orientation: string@orientation-completer # Horizontal or Vertical (default: Horizontal)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/FlipImage")
+  let body = {file: $file, orientation: $orientation} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "*/*"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Currency - Format currency
+#
+# POST /FormatCurrency
+# operationId: FormatCurrency
+export def "format-currency FormatCurrency" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: float # Amount to format
+  target: string@target-completer-2
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/FormatCurrency")
+  let body = {input: $input, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# DateTime - Format date and time
+#
+# POST /FormatDateTime
+# operationId: FormatDateTime
+export def "format-date-time FormatDateTime" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  culture: string@culture-completer # Language culture (default: en-US)
+  format: string # Output format
+  input: string # Source date and time
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/FormatDateTime")
+  let body = {culture: $culture, format: $format, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Generate GUID
+#
+# POST /GenerateGuid
+# operationId: GenerateGuid
+export def "generate-guid GenerateGuid" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  uppercase: string@uppercase-completer # All uppercase alpha characters
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/GenerateGuid")
+  let body = {uppercase: $uppercase} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Generate hash
+#
+# POST /GenerateHash
+# operationId: GenerateHash
+export def "generate-hash GenerateHash" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  algorithm: string@algorithm-completer # Hash algorithm
+  input: string # Hash source string
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/GenerateHash")
+  let body = {algorithm: $algorithm, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Generate QR code
+#
+# POST /GenerateQRCode
+# operationId: GenerateQRCode
+export def "generate-qr-code GenerateQRCode" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # Text value(s) (vertical bar delimited by type)
+  payload: string@payload-completer # Payload type (default: Plain Text (string))
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/GenerateQRCode")
+  let body = {input: $input, payload: $payload} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "image/png"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - JSON to CSV
+#
+# POST /JSONtoCSV
+# operationId: JsonToCsv
+export def "jso-nto-csv JsonToCsv" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --header: oneof<nothing, bool> # Include header row (default: true)
+  input: string # JSON array object
+  --omit: string # Columns to omit (comma separated)
+  --order: string # Column order (comma separated)
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/JSONtoCSV")
+  let body = {header: $header, input: $input, omit: $omit, order: $order} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - JSON to HTML Table
+#
+# POST /JSONtoHTML
+# operationId: JsonToHtml
+export def "jso-nto-html JsonToHtml" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alternate: string # Alternate header row markup
+  --attributes: string # Optional table attributes (single quoted values)
+  --header: oneof<nothing, bool> # Include header row (default: true)
+  input: string # JSON array object
+  --omit: string # Columns to omit (comma separated)
+  --order: string # Column order (comma separated)
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/JSONtoHTML")
+  let body = {alternate: $alternate, attributes: $attributes, header: $header, input: $input, omit: $omit, order: $order} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - JSON to XML
+#
+# POST /JSONtoXML
+# operationId: JsonToXml
+export def "jso-nto-xml JsonToXml" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # JSON array object
+  root: string # Name of root node
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/JSONtoXML")
+  let body = {input: $input, root: $root} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Join strings
+#
+# POST /JoinStrings
+# operationId: JoinStrings
+export def "join-strings JoinStrings" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection of strings to be joined
+  lower: string@lower-completer # Convert strings in collection to lowercase
+  separator: string # Separator character
+  trim: string@trim-completer # Trim strings in collection
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/JoinStrings")
+  let body = {input: $input, lower: $lower, separator: $separator, trim: $trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Finance - Market index
+#
+# POST /MarketIndex
+# operationId: MarketIndex
+export def "market-index MarketIndex" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --date: string # Date (yyyy-MM-dd, leave empty for last trading day)
+  symbol: string@symbol-completer # Market index
+]: any -> record<adj_close: float, adj_high: float, adj_low: float, adj_open: float, adj_volume: float, close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/MarketIndex")
+  let body = {date: $date, symbol: $symbol} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - Query JSON
+#
+# POST /QueryJSON
+# operationId: QueryJson
+export def "query-json QueryJson" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # XML or JSON string
+  --body-query: string # XPath or JSONPath query
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/QueryJSON")
+  let body = {input: $input, query: $body_query} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - Query XML
+#
+# POST /QueryXML
+# operationId: QueryXml
+export def "query-xml QueryXml" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # XML or JSON string
+  --body-query: string # XPath or JSONPath query
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/QueryXML")
+  let body = {input: $input, query: $body_query} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Random number
+#
+# POST /RandomNumber
+# operationId: RandomNumber
+export def "random-number RandomNumber" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  end: float # End of range
+  start: float # Start of range
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/RandomNumber")
+  let body = {end: $end, start: $start} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Redact string
+#
+# POST /RedactString
+# operationId: RedactString
+export def "redact-string RedactString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --regex: string # Regular expression pattern for matching strings
+  --body-source: string # String containing the complete text
+  --value: string # Individual string to redact
+  --values: list # Collection of strings to redact
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/RedactString")
+  let body = {regex: $regex, source: $body_source, value: $value, values: $values} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Remove from collection
+#
+# POST /RemoveFromCollection
+# operationId: RemoveFromCollection
+export def "remove-from-collection RemoveFromCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --index: string # Index position for operation (leave blank to specify end of collection)
+  input: list # Collection of values or objects to modify
+  --item: string # Item (for multiple items, leave blank and use Items)
+  --items: list # Items (Collection, for a single item leave blank and use Item)
+]: any -> record<result: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/RemoveFromCollection")
+  let body = {index: $index, input: $input, item: $item, items: $items} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Replace string
+#
+# POST /ReplaceString
+# operationId: ReplaceString
+export def "replace-string ReplaceString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  replacement: string # Replacement text
+  --body-source: string # String containing the text to be replaced
+  value: string # Text to replace
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ReplaceString")
+  let body = {replacement: $replacement, source: $body_source, value: $value} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Replace values in collection
+#
+# POST /ReplaceValuesInCollection
+# operationId: ReplaceValuesInCollection
+export def "replace-values-in-collection ReplaceValuesInCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  ignoreCase: string@ignoreCase-completer # Ignore case (default: true)
+  input: list # Collection of strings
+  --body-match: string # Match value
+  replacement: string # Replacement value
+]: any -> record<result: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ReplaceValuesInCollection")
+  let body = {ignoreCase: $ignoreCase, input: $input, match: $body_match, replacement: $replacement} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Resize Image
+#
+# POST /ResizeImage
+# operationId: ResizeImage
+export def "resize-image ResizeImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  algorithm: string@algorithm-completer-1 # Optimize output quality of the target image (default: Bicubic (default))
+  file: string # Source image file (format: binary)
+  --height: float # Image height (pixels or percent)
+  units: string@units-completer # Image adjustment units (default: Pixels)
+  --width: float # Image width (pixels or percent)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ResizeImage")
+  let body = {algorithm: $algorithm, file: $file, height: $height, units: $units, width: $width} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "image/bmp")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Files - Rotate Image
+#
+# POST /RotateImage
+# operationId: RotateImage
+export def "rotate-image RotateImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  degrees: string # Number of degrees
+  file: string # Source image file (format: binary)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/RotateImage")
+  let body = {degrees: $degrees, file: $file} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "*/*"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Math - Round number
+#
+# POST /RoundNumber
+# operationId: RoundNumber
+export def "round-number RoundNumber" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: float # Numeric value to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/RoundNumber")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Shorten hyperlink
+#
+# POST /ShortenLink
+# operationId: ShortenLink
+export def "shorten-link ShortenLink" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # String variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ShortenLink")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Collections - Sort collection
+#
+# POST /SortCollection
+# operationId: SortCollection
+export def "sort-collection SortCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: list # Collection of strings to sort
+  order: string@order-completer # Sort order (default: Ascending)
+]: any -> record<result: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/SortCollection")
+  let body = {input: $input, order: $order} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Speech to Text
+#
+# POST /SpeechToText
+# operationId: SpeechToText
+export def "speech-to-text SpeechToText" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  file: string # Source audio file (WAV, MP3, AAC, M4A) (format: binary)
+  language: string@language-completer # Language of audio input (default: English (United States))
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/SpeechToText")
+  let body = {file: $file, language: $language} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# Collections - Split collection
+#
+# POST /SplitCollection
+# operationId: SplitCollection
+export def "split-collection SplitCollection" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --index: string # Index location to split (leave empty to use Match value)
+  input: list # Collection of items to split
+  --body-match: string # String to match (explicit, case-insensitive, leave empty to use Index)
+]: any -> record<result1: list<string>, result2: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/SplitCollection")
+  let body = {index: $index, input: $input, match: $body_match} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Split string
+#
+# POST /SplitString
+# operationId: SplitString
+export def "split-string SplitString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  characters: string # One or more characters that will be used to split the text
+  input: string # Text to split
+]: any -> record<data: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/SplitString")
+  let body = {characters: $characters, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Math - Calculate standard deviation
+#
+# POST /StandardDeviation
+# operationId: StandardDeviation
+export def "standard-deviation StandardDeviation" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  decimals: float # Round to number of decimal places
+  input: list # Colllection of values to calculate
+]: any -> record<result: float> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/StandardDeviation")
+  let body = {decimals: $decimals, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Finance - Stock prices
+#
+# POST /StockPrices
+# operationId: StockPrices
+export def "stock-prices StockPrices" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --date: string # Date (yyyy-MM-dd, leave empty for latest)
+  --exchange: string@exchange-completer # Stock exchange
+  symbols: string # Stock ticker symbols (comma-separated, max 20)
+]: any -> record<result: table<close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/StockPrices")
+  let body = {date: $date, exchange: $exchange, symbols: $symbols} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - String to File
+#
+# POST /StringToFile
+# operationId: StringToFile
+export def "string-to-file StringToFile" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer-1 # Response content type
+  extension: string@extension-completer # File extension (default: TXT)
+  filename: string # Name of file (without extension)
+  input: string # Text string (body of file)
+]: any -> string {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/StringToFile")
+  let body = {extension: $extension, filename: $filename, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Text to Speech
+#
+# POST /TextToSpeech
+# operationId: TextToSpeech
+export def "text-to-speech TextToSpeech" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  text: string # Text to convert (10,000 characters max)
+  type: string@type-completer-2 # Text or file type (default: PlainText)
+  voice: string@voice-completer # Voice locale (must match language of input text) (default: en-US, Aria (Female))
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/TextToSpeech")
+  let body = {text: $text, type: $type, voice: $voice} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "audio/mp3"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Translate string
+#
+# POST /TranslateString
+# operationId: TranslateString
+export def "translate-string TranslateString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # String containing the text to be translated
+  language: string@language-completer-1 # Translation language
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/TranslateString")
+  let body = {input: $input, language: $language} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Trim string
+#
+# POST /TrimString
+# operationId: TrimString
+export def "trim-string TrimString" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # String containing the text to be trimmed
+  type: string@type-completer-3 # Type of white space to remove
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/TrimString")
+  let body = {source: $body_source, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Decode URL
+#
+# POST /URLDecode
+# operationId: UrlDecode
+export def "url-decode UrlDecode" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # Encoded string variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/URLDecode")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Encode URL
+#
+# POST /URLEncode
+# operationId: UrlEncode
+export def "url-encode UrlEncode" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # String variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/URLEncode")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Validate email
+#
+# POST /ValidateEmail
+# operationId: ValidateEmail
+export def "validate-email ValidateEmail" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-source: string # String variable or text value
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ValidateEmail")
+  let body = {source: $body_source} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Text - Verify hash
+#
+# POST /VerifyHash
+# operationId: VerifyHash
+export def "verify-hash VerifyHash" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  algorithm: string@algorithm-completer # Hash algorithm
+  hash: string # Hashed result
+  input: string # Original source string
+]: any -> record<result: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/VerifyHash")
+  let body = {algorithm: $algorithm, hash: $hash, input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Files - Watermark Image
+#
+# POST /WatermarkImage
+# operationId: WatermarkImage
+export def "watermark-image WatermarkImage" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  color: string # Text color hex value (default: 000000)
+  file: string # Source image file (format: binary)
+  font: string@font-completer # Text font (default: Arial)
+  horizontal: string@horizontal-completer # Horizontal alignment (default: Center)
+  size: float # Font size (points)
+  text: string # Watermark text
+  vertical: string@vertical-completer # Vertical alignment (default: Center)
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/WatermarkImage")
+  let body = {color: $color, file: $file, font: $font, horizontal: $horizontal, size: $size, text: $text, vertical: $vertical} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "*/*"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+}
+
+# DateTime - Get world time
+#
+# POST /WorldTime
+# operationId: WorldTime
+export def "world-time WorldTime" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --format: string # Display format (defaults to 'yyyy-MM-dd HH:mm:ss')
+  input: string # Source date and time
+  --body-source: string@source-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
+  target: string@target-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/WorldTime")
+  let body = {format: $format, input: $input, source: $body_source, target: $target} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Data - XML to JSON
+#
+# POST /XMLtoJSON
+# operationId: XmlToJson
+export def "xm-lto-json XmlToJson" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  input: string # XML string
+]: any -> record<result: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/XMLtoJSON")
+  let body = {input: $input} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

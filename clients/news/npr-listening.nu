@@ -1,0 +1,349 @@
+# Auto-generated client for NPR Listening Service v2
+# Source: https://api.apis.guru/v2/specs/npr.org/listening/2/swagger.json
+# Auth: --token flag or $env.NPR_LISTENING_SERVICE_TOKEN
+
+const BASE_URL = "https://listening.api.npr.org"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NPR_LISTENING_SERVICE_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://listening.api.npr.org"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def accept-completer [] { ["application/json" "application/vnd.collection.doc+json"] }
+def channel-completer [] { ["emailprograms" "emailstories" "followed" "lapsedusersemail" "newscasts" "npr" "ongoing email" "recommended" "shows"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregation-recommendations get" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Get a set of recommendations for an aggregation independent of the user's listening history
+#
+# GET /v2/aggregation/{aggId}/recommendations
+# operationId: getAggRecommendations
+export def "aggregation-recommendations get" [
+  aggId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --startNum: int # The result to start with. Allows paging through the episodes of a podcast or program, with the default, `startNum=0`, being the most recent episode. Ignored for programs that publish a rundown. (format: int32, default: 0)
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> record<attributes: record<affiliation: string, affiliationMeta: record<daysSinceLastListen: int, following: bool, href: string, id: int, notif_following: list, notif_rated: list, rating: float, title: string>, description: string, provider: string, station: string, title: string, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<binge: list<record>, image: list<record>, more: list<record>, web: list<record>>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "startNum" $startNum "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/aggregation/($aggId)/recommendations" $qp)
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the list of available channels
+#
+# GET /v2/channels
+# operationId: getChannels
+export def "channels get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --exploreOnly: oneof<nothing, bool> # If set to `true`, this call will return only channels that should be shown in the client's `Explore` view (default: false)
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> record<attributes: record<defaultChannel: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "exploreOnly" $exploreOnly "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/channels" $qp)
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get recent ratings the logged-in user has submitted
+#
+# GET /v2/history
+# operationId: getHistory
+export def "history get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/history")
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a list of recommendations from a category of content from an organization
+#
+# GET /v2/organizations/{orgId}/categories/{category}/recommendations
+# operationId: getOrganizationCategory
+export def "organizations-categories-recommendations get" [
+  orgId: int
+  category: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> record<attributes: record<displayType: string, title: string, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<more: list<record>>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v2/organizations/($orgId)/categories/($category)/recommendations")
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a variety of details about an organization including various lists of recent audio items
+#
+# GET /v2/organizations/{orgId}/recommendations
+# operationId: getOrganizationOverview
+export def "organizations-recommendations get" [
+  orgId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> record<attributes: record<brand: record<band: string, call: string, frequency: string, marketCity: string, marketState: string, name: string, tagline: string>, home: bool, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<image: list<record>, related: list<record>, web: list<record>>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v2/organizations/($orgId)/recommendations")
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieve the most recent promo audio heard by the logged-in user
+#
+# GET /v2/promo/recommendations
+# operationId: getPromo
+export def "promo-recommendations get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/promo/recommendations")
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Collect new ratings for media previously recommended to the logged-in user
+#
+# POST /v2/ratings
+# operationId: postRating
+export def "ratings post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --channel: string@channel-completer # Determines the focus of the recommendations returned. Channel `npr` is recommended for most use cases. (default: npr)
+  --recommend: oneof<nothing, bool> # If set to `false`, this call will return a blank document; otherwise it will return a new recommendation object (default: true)
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --X-Advertising-ID: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
+  --body: record
+]: any -> record<attributes: record, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/ratings" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Authorization": $Authorization, "X-Advertising-ID": $X_Advertising_ID} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get a list of media for the logged-in user from NPR's recommendation engine
+#
+# GET /v2/recommendations
+# operationId: getRecommendations
+export def "recommendations get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --channel: string@channel-completer # Determines the focus of the recommendations returned. Channel `npr` is recommended for most use cases. (default: npr)
+  --sharedMediaId: string # This media was shared directly with the user; if provided, the service will add this recommendation to the top of the list
+  --notifiedMediaId: string # The user received a push notification about this media; if provided, the service will add this recommendation to the top of the list
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --X-Advertising-ID: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "sharedMediaId" $sharedMediaId "scalar") (serialize-qp "notifiedMediaId" $notifiedMediaId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/recommendations" $qp)
+  let extra_headers = {"Authorization": $Authorization, "X-Advertising-ID": $X_Advertising_ID} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a list of recent audio and aggregation items associated with search terms
+#
+# GET /v2/search/recommendations
+# operationId: getSearchRecommendations
+export def "search-recommendations get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --searchTerms: string # Search terms to search on; can include URL-encoded punctuation
+  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+]: nothing -> record<attributes: record<query: string>, errors: list<record>, href: string, items: table<ifTypeAggregation: record, ifTypeAudio: record, type: string>, links: record, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "searchTerms" $searchTerms "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/search/recommendations" $qp)
+  let extra_headers = {"Authorization": $Authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
