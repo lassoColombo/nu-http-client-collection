@@ -12,8 +12,9 @@
 #   nu scripts/generate.nu --name countries --force     # regenerate `countries`
 #   nu scripts/generate.nu --category ai --force        # regenerate every client in `ai`
 #
-# Clients are written to `<out-dir>/<category>/<name>.nu`. Names must be
-# unique across categories (validated at startup).
+# Clients are written to `<out-dir>/<category>/<name>.nu`. Sources (URL or
+# file path) must be globally unique, and names must be unique within each
+# category (both validated at startup).
 #
 # The generator (nu-http-client-generator) must be available at the path passed
 # via --generator (default: ./_generator). Locally:
@@ -41,7 +42,8 @@ def main [
     if ($all_clients | is-empty) {
         error make { msg: $"no clients defined in ($config)" }
     }
-    validate-unique-names $all_clients
+    validate-unique-sources $all_clients
+    validate-unique-names-per-category $all_clients
 
     if $list_only {
         write-list-file $list_file (filter-existing $all_clients $out_dir) $out_dir
@@ -120,16 +122,37 @@ def flatten-registry [grouped: record]: nothing -> list {
     | flatten
 }
 
-def validate-unique-names [clients: list] {
+# Sources (URL or local file path) must be globally unique: two entries that
+# point at the same spec would generate identical clients under different
+# names. Treats URLs and file paths the same — they're both strings.
+def validate-unique-sources [clients: list] {
     let dupes = (
         $clients
-        | group-by name
-        | transpose name entries
+        | group-by source
+        | transpose source entries
         | where ($it.entries | length) > 1
     )
     if not ($dupes | is-empty) {
-        let names = ($dupes | get name | str join ", ")
-        error make { msg: $"client names must be unique across categories — found duplicates: ($names)" }
+        let details = ($dupes | each {|d|
+            let locations = ($d.entries | each {|e| $"($e.category)/($e.name)" } | str join ", ")
+            $"  - ($d.source) → ($locations)"
+        } | str join "\n")
+        error make { msg: $"client sources must be unique — found duplicates:\n($details)" }
+    }
+}
+
+# Names only need to be unique within a category, since each client is written
+# to `<out-dir>/<category>/<name>.nu` and category prefixes the path.
+def validate-unique-names-per-category [clients: list] {
+    let dupes = (
+        $clients
+        | group-by { |c| $"($c.category)/($c.name)" }
+        | transpose key entries
+        | where ($it.entries | length) > 1
+    )
+    if not ($dupes | is-empty) {
+        let names = ($dupes | get key | str join ", ")
+        error make { msg: $"client names must be unique within a category — found duplicates: ($names)" }
     }
 }
 
